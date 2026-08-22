@@ -70,3 +70,8 @@
 - [x] Inspect the active live-app URL and GitHub repository context for reliable links and permitted metadata changes.
 - [x] Add only verified live-demo and CI links to README, then apply appropriate repository topics if permitted. No GitHub remote or repository URL is configured, so topics and a CI badge were intentionally not added.
 - [x] Verify README accuracy and run npm test, coverage, type check, and production build.
+
+## GitHub repository connection
+- [x] Inspect the target `shreyas953257/focus-universe` repository and current local Git state.
+- [ ] Connect the existing project remote and push the complete verified project to `main` without adding secrets.
+- [ ] Verify the remote contains the project files and README Live Demo link.
