@@ -1,5 +1,5 @@
 /* Focus Universe offline shell: caches only same-origin app resources after their first successful load. */
-const CACHE_NAME = "focus-universe-offline-v1";
+const CACHE_NAME = "focus-universe-offline-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/manus-storage/focus-universe-mark_cdda4958.png"];
 
 self.addEventListener("install", (event) => {
@@ -20,4 +20,3 @@ self.addEventListener("fetch", (event) => {
     return response;
   }).catch(() => event.request.mode === "navigate" ? caches.match("/") : undefined)));
 });
-

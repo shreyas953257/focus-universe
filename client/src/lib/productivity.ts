@@ -6,20 +6,16 @@ export const STORAGE_KEY = "focus-universe-state-v1";
 export const FOCUS_XP = 50;
 export const GOAL_XP = 20;
 
-export type FocusSession = {
-  id: string;
-  completedAt: string;
-  durationMinutes: number;
-};
-
-export type DailyGoal = {
-  id: string;
-  title: string;
-  completed: boolean;
-  createdAt: string;
-  completedAt?: string;
-  xpAwarded?: boolean;
-};
+export type FocusSession = { id: string; completedAt: string; durationMinutes: number };
+export type DailyGoal = { id: string; title: string; completed: boolean; createdAt: string; completedAt?: string; xpAwarded?: boolean };
+export type FocusTimerStatus = "ready" | "running" | "paused" | "completed";
+export type FocusTimer = { durationMinutes: number; secondsLeft: number; status: FocusTimerStatus };
+export type UniverseProgress = { level: number; universeLevel: number; stars: number; planets: number; moons: number; cometUnlocked: boolean };
+export type UniverseUnlockEvent = { id: string; title: string; detail: string };
+export type UniverseUnlockHistoryRecord = UniverseUnlockEvent & { unlockedAt: string };
+export type UnlockHistoryFilter = "all" | "star" | "planet" | "moon" | "comet" | "sector";
+export type UnlockHistorySort = "newest" | "oldest" | "type";
+export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export type FocusUniverseState = {
   xp: number;
@@ -28,36 +24,8 @@ export type FocusUniverseState = {
   productiveDates: Record<string, true>;
   announcedUnlocks: string[];
   unlockHistory: UniverseUnlockHistoryRecord[];
+  soundEnabled: boolean;
 };
-
-export type FocusTimerStatus = "ready" | "running" | "paused" | "completed";
-
-export type FocusTimer = {
-  durationMinutes: number;
-  secondsLeft: number;
-  status: FocusTimerStatus;
-};
-
-export type UniverseProgress = {
-  level: number;
-  universeLevel: number;
-  stars: number;
-  planets: number;
-  moons: number;
-  cometUnlocked: boolean;
-};
-
-export type UniverseUnlockEvent = {
-  id: string;
-  title: string;
-  detail: string;
-};
-
-export type UniverseUnlockHistoryRecord = UniverseUnlockEvent & {
-  unlockedAt: string;
-};
-
-export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export const initialProductivityState: FocusUniverseState = {
   xp: 0,
@@ -66,6 +34,7 @@ export const initialProductivityState: FocusUniverseState = {
   productiveDates: {},
   announcedUnlocks: [],
   unlockHistory: [],
+  soundEnabled: false,
 };
 
 export function dateKey(input: Date | string) {
@@ -75,13 +44,8 @@ export function dateKey(input: Date | string) {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-export function levelBase(level: number) {
-  return Math.pow(level - 1, 2) * 100;
-}
-
-export function levelForXp(xp: number) {
-  return Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1;
-}
+export function levelBase(level: number) { return Math.pow(level - 1, 2) * 100; }
+export function levelForXp(xp: number) { return Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1; }
 
 export function levelProgress(xp: number) {
   const level = levelForXp(xp);
@@ -89,13 +53,7 @@ export function levelProgress(xp: number) {
   const nextFloor = levelBase(level + 1);
   const current = xp - currentFloor;
   const required = nextFloor - currentFloor;
-  return {
-    level,
-    current,
-    required,
-    remaining: nextFloor - xp,
-    percent: Math.min(100, Math.max(0, (current / required) * 100)),
-  };
+  return { level, current, required, remaining: nextFloor - xp, percent: Math.min(100, Math.max(0, (current / required) * 100)) };
 }
 
 export function universeProgress(xp: number, currentStreak: number): UniverseProgress {
@@ -112,21 +70,11 @@ export function universeProgress(xp: number, currentStreak: number): UniversePro
 
 export function universeUnlockEvents(before: UniverseProgress, after: UniverseProgress, announcedUnlocks: string[] = []): UniverseUnlockEvent[] {
   const candidates: UniverseUnlockEvent[] = [];
-  for (let count = before.stars + 1; count <= after.stars; count += 1) {
-    candidates.push({ id: `star-${count}`, title: "Star ignited", detail: `Star ${count} has joined your constellation.` });
-  }
-  for (let count = before.planets + 1; count <= after.planets; count += 1) {
-    candidates.push({ id: `planet-${count}`, title: "Planet detected", detail: `Planet ${count} has settled into your orbit.` });
-  }
-  for (let count = before.moons + 1; count <= after.moons; count += 1) {
-    candidates.push({ id: `moon-${count}`, title: "Moon detected", detail: `Moon ${count} now circles your sector.` });
-  }
-  if (after.cometUnlocked && !before.cometUnlocked) {
-    candidates.push({ id: "comet", title: "Comet detected", detail: "Your three-day focus streak has lit the outer sky." });
-  }
-  for (let level = before.universeLevel + 1; level <= after.universeLevel; level += 1) {
-    candidates.push({ id: `sector-${level}`, title: `Sector 0${level} opened`, detail: "A wider observatory orbit is now within reach." });
-  }
+  for (let count = before.stars + 1; count <= after.stars; count += 1) candidates.push({ id: `star-${count}`, title: "Star ignited", detail: `Star ${count} has joined your constellation.` });
+  for (let count = before.planets + 1; count <= after.planets; count += 1) candidates.push({ id: `planet-${count}`, title: "Planet detected", detail: `Planet ${count} has settled into your orbit.` });
+  for (let count = before.moons + 1; count <= after.moons; count += 1) candidates.push({ id: `moon-${count}`, title: "Moon detected", detail: `Moon ${count} now circles your sector.` });
+  if (after.cometUnlocked && !before.cometUnlocked) candidates.push({ id: "comet", title: "Comet detected", detail: "Your three-day focus streak has lit the outer sky." });
+  for (let level = before.universeLevel + 1; level <= after.universeLevel; level += 1) candidates.push({ id: `sector-${level}`, title: `Sector 0${level} opened`, detail: "A wider observatory orbit is now within reach." });
   return candidates.filter((event) => !announcedUnlocks.includes(event.id));
 }
 
@@ -140,6 +88,19 @@ export function recordUniverseUnlocks(state: FocusUniverseState, events: Univers
   };
 }
 
+export function unlockHistoryType(record: UniverseUnlockHistoryRecord): Exclude<UnlockHistoryFilter, "all"> {
+  const prefix = record.id.split("-")[0];
+  return prefix === "planet" || prefix === "moon" || prefix === "comet" || prefix === "sector" ? prefix : "star";
+}
+
+export function filterAndSortUnlockHistory(records: UniverseUnlockHistoryRecord[], filter: UnlockHistoryFilter, sort: UnlockHistorySort) {
+  const visible = filter === "all" ? records : records.filter((record) => unlockHistoryType(record) === filter);
+  return [...visible].sort((left, right) => {
+    if (sort === "type") return unlockHistoryType(left).localeCompare(unlockHistoryType(right)) || right.unlockedAt.localeCompare(left.unlockedAt);
+    return sort === "oldest" ? left.unlockedAt.localeCompare(right.unlockedAt) : right.unlockedAt.localeCompare(left.unlockedAt);
+  });
+}
+
 function parseDateKey(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(year, month - 1, day, 12, 0, 0, 0);
@@ -148,16 +109,11 @@ function parseDateKey(value: string) {
 export function calculateStreak(productiveDates: Record<string, true>, now = new Date()) {
   const keys = Object.keys(productiveDates).sort();
   if (!keys.length) return { current: 0, best: 0 };
-
   let current = 0;
   const cursor = new Date(now);
   cursor.setHours(12, 0, 0, 0);
   if (!productiveDates[dateKey(cursor)]) cursor.setDate(cursor.getDate() - 1);
-  while (productiveDates[dateKey(cursor)]) {
-    current += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
+  while (productiveDates[dateKey(cursor)]) { current += 1; cursor.setDate(cursor.getDate() - 1); }
   let best = 1;
   let running = 1;
   for (let index = 1; index < keys.length; index += 1) {
@@ -175,18 +131,9 @@ export function createFocusTimer(durationMinutes = 25): FocusTimer {
   return { durationMinutes: safeDuration, secondsLeft: safeDuration * 60, status: "ready" };
 }
 
-export function startFocusTimer(timer: FocusTimer): FocusTimer {
-  if (timer.status === "completed") return timer;
-  return { ...timer, status: "running" };
-}
-
-export function pauseFocusTimer(timer: FocusTimer): FocusTimer {
-  return timer.status === "running" ? { ...timer, status: "paused" } : timer;
-}
-
-export function resumeFocusTimer(timer: FocusTimer): FocusTimer {
-  return timer.status === "paused" || timer.status === "ready" ? { ...timer, status: "running" } : timer;
-}
+export function startFocusTimer(timer: FocusTimer): FocusTimer { return timer.status === "completed" ? timer : { ...timer, status: "running" }; }
+export function pauseFocusTimer(timer: FocusTimer): FocusTimer { return timer.status === "running" ? { ...timer, status: "paused" } : timer; }
+export function resumeFocusTimer(timer: FocusTimer): FocusTimer { return timer.status === "paused" || timer.status === "ready" ? { ...timer, status: "running" } : timer; }
 
 export function tickFocusTimer(timer: FocusTimer, elapsedSeconds = 1): FocusTimer {
   if (timer.status !== "running") return timer;
@@ -194,41 +141,18 @@ export function tickFocusTimer(timer: FocusTimer, elapsedSeconds = 1): FocusTime
   return { ...timer, secondsLeft, status: secondsLeft === 0 ? "completed" : "running" };
 }
 
-export function resetFocusTimer(timer: FocusTimer, durationMinutes = timer.durationMinutes): FocusTimer {
-  return createFocusTimer(durationMinutes);
-}
+export function resetFocusTimer(timer: FocusTimer, durationMinutes = timer.durationMinutes): FocusTimer { return createFocusTimer(durationMinutes); }
 
 export function completeTimerSession(state: FocusUniverseState, timer: FocusTimer, session: FocusSession): { state: FocusUniverseState; awarded: boolean } {
-  if (timer.status !== "completed" || state.sessions.some((item) => item.id === session.id)) {
-    return { state, awarded: false };
-  }
-
-  return {
-    awarded: true,
-    state: {
-      ...state,
-      xp: state.xp + FOCUS_XP,
-      sessions: [...state.sessions, session],
-      productiveDates: { ...state.productiveDates, [dateKey(session.completedAt)]: true } as Record<string, true>,
-    },
-  };
+  if (timer.status !== "completed" || state.sessions.some((item) => item.id === session.id)) return { state, awarded: false };
+  return { awarded: true, state: { ...state, xp: state.xp + FOCUS_XP, sessions: [...state.sessions, session], productiveDates: { ...state.productiveDates, [dateKey(session.completedAt)]: true } as Record<string, true> } };
 }
 
 export function completeDailyGoal(state: FocusUniverseState, goalId: string, completedAt: string): { state: FocusUniverseState; awarded: boolean } {
   const goal = state.goals.find((item) => item.id === goalId);
   if (!goal || goal.completed) return { state, awarded: false };
-
   const awarded = !goal.xpAwarded;
-
-  return {
-    awarded,
-    state: {
-      ...state,
-      xp: state.xp + (awarded ? GOAL_XP : 0),
-      productiveDates: { ...state.productiveDates, [dateKey(completedAt)]: true } as Record<string, true>,
-      goals: state.goals.map((item) => item.id === goalId ? { ...item, completed: true, completedAt, xpAwarded: true } : item),
-    },
-  };
+  return { awarded, state: { ...state, xp: state.xp + (awarded ? GOAL_XP : 0), productiveDates: { ...state.productiveDates, [dateKey(completedAt)]: true } as Record<string, true>, goals: state.goals.map((item) => item.id === goalId ? { ...item, completed: true, completedAt, xpAwarded: true } : item) } };
 }
 
 export function toggleDailyGoal(state: FocusUniverseState, goalId: string, completedAt: string): { state: FocusUniverseState; awarded: boolean } {
@@ -251,7 +175,7 @@ export function deleteDailyGoal(state: FocusUniverseState, goalId: string): Focu
 
 export function resetAllProgress(confirmReset: () => boolean): FocusUniverseState | null {
   if (!confirmReset()) return null;
-  return { xp: 0, sessions: [], goals: [], productiveDates: {}, announcedUnlocks: [], unlockHistory: [] };
+  return { ...initialProductivityState, sessions: [], goals: [], productiveDates: {}, announcedUnlocks: [], unlockHistory: [] };
 }
 
 export function dailyFocusMinutes(sessions: FocusSession[], now = new Date()) {
@@ -266,24 +190,71 @@ export function monthlyFocusMinutes(sessions: FocusSession[], now = new Date()) 
   return sessions.filter((session) => new Date(session.completedAt) >= cutoff).reduce((total, session) => total + session.durationMinutes, 0);
 }
 
+export function weeklyFocusTotals(sessions: FocusSession[], now = new Date(), weekCount = 4) {
+  const end = new Date(now);
+  end.setHours(12, 0, 0, 0);
+  return Array.from({ length: weekCount }, (_, index) => {
+    const start = new Date(end);
+    start.setDate(end.getDate() - ((weekCount - index) * 7 - 1));
+    const finish = new Date(start);
+    finish.setDate(start.getDate() + 6);
+    const startKey = dateKey(start);
+    const endKey = dateKey(finish);
+    const minutes = sessions.filter((session) => {
+      const key = dateKey(session.completedAt);
+      return key >= startKey && key <= endKey;
+    }).reduce((total, session) => total + session.durationMinutes, 0);
+    return { label: `W${index + 1}`, start: startKey, end: endKey, minutes };
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+function isSession(value: unknown): value is FocusSession { return isRecord(value) && typeof value.id === "string" && typeof value.completedAt === "string" && typeof value.durationMinutes === "number" && Number.isFinite(value.durationMinutes); }
+function isGoal(value: unknown): value is DailyGoal { return isRecord(value) && typeof value.id === "string" && typeof value.title === "string" && typeof value.completed === "boolean" && typeof value.createdAt === "string"; }
+function isUnlockHistoryRecord(value: unknown): value is UniverseUnlockHistoryRecord { return isRecord(value) && typeof value.id === "string" && typeof value.title === "string" && typeof value.detail === "string" && typeof value.unlockedAt === "string"; }
+
+export function validateFocusUniverseState(value: unknown): FocusUniverseState | null {
+  if (!isRecord(value) || typeof value.xp !== "number" || !Number.isFinite(value.xp) || value.xp < 0 || !Array.isArray(value.sessions) || !value.sessions.every(isSession) || !Array.isArray(value.goals) || !value.goals.every(isGoal) || !isRecord(value.productiveDates)) return null;
+  const productiveDates: Record<string, true> = {};
+  for (const [key, dateValue] of Object.entries(value.productiveDates)) {
+    if (dateValue !== true) return null;
+    productiveDates[key] = true;
+  }
+  return {
+    xp: value.xp,
+    sessions: value.sessions,
+    goals: value.goals,
+    productiveDates,
+    announcedUnlocks: Array.isArray(value.announcedUnlocks) ? value.announcedUnlocks.filter((entry): entry is string => typeof entry === "string") : [],
+    unlockHistory: Array.isArray(value.unlockHistory) ? value.unlockHistory.filter(isUnlockHistoryRecord) : [],
+    soundEnabled: value.soundEnabled === true,
+  };
+}
+
+export function createFocusUniverseExport(state: FocusUniverseState, exportedAt = new Date().toISOString()) {
+  const exportedAtDate = new Date(exportedAt);
+  return JSON.stringify({ format: "focus-universe-backup-v1", exportedAt, progress: state, analytics: { weekly: weeklyFocusTotals(state.sessions, exportedAtDate), monthlyMinutes: monthlyFocusMinutes(state.sessions, exportedAtDate) } }, null, 2);
+}
+
+export function parseFocusUniverseExport(content: string): FocusUniverseState | null {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    return isRecord(parsed) && parsed.format === "focus-universe-backup-v1" ? validateFocusUniverseState(parsed.progress) : null;
+  } catch { return null; }
+}
+
+export function confirmFocusUniverseImport(content: string, confirmReplacement: () => boolean): FocusUniverseState | null {
+  const imported = parseFocusUniverseExport(content);
+  return imported && confirmReplacement() ? imported : null;
+}
+
 export function loadProductivityState(storage: StorageLike): FocusUniverseState {
   try {
     const storedValue = storage.getItem(STORAGE_KEY);
     if (!storedValue) return initialProductivityState;
-    const parsed = JSON.parse(storedValue) as Partial<FocusUniverseState>;
-    return {
-      xp: Number(parsed.xp) || 0,
-      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-      goals: Array.isArray(parsed.goals) ? parsed.goals : [],
-      productiveDates: parsed.productiveDates ?? {},
-      announcedUnlocks: Array.isArray(parsed.announcedUnlocks) ? parsed.announcedUnlocks.filter((value): value is string => typeof value === "string") : [],
-      unlockHistory: Array.isArray(parsed.unlockHistory) ? parsed.unlockHistory.filter((record): record is UniverseUnlockHistoryRecord => Boolean(record) && typeof record.id === "string" && typeof record.title === "string" && typeof record.detail === "string" && typeof record.unlockedAt === "string") : [],
-    };
-  } catch {
-    return initialProductivityState;
-  }
+    const parsed = JSON.parse(storedValue) as unknown;
+    return validateFocusUniverseState(parsed) ?? initialProductivityState;
+  } catch { return initialProductivityState; }
 }
 
-export function saveProductivityState(storage: StorageLike, state: FocusUniverseState) {
-  storage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
+export function saveProductivityState(storage: StorageLike, state: FocusUniverseState) { storage.setItem(STORAGE_KEY, JSON.stringify(state)); }

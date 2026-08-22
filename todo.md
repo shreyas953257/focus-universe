@@ -37,3 +37,13 @@
 - [x] Add durable first-discovery history records to the existing local persistence model.
 - [x] Add a responsive, cinematic Unlock History panel without altering existing layout behavior.
 - [x] Add deterministic tests for history recording, persistence, and duplicate prevention; run the full validation set.
+
+## Attached continuation requirements
+- [x] Review the newly attached requirement file and identify the requested app changes.
+- [x] Add instant unlock-history filters and accessible sorting without modifying stored records.
+- [x] Add fully local validated export/import with replacement confirmation and safe rejection of invalid files.
+- [x] Add an off-by-default locally persisted sound preference that respects autoplay restrictions.
+- [x] Improve accessible controls, notifications, and keyboard interaction without altering visual design.
+- [x] Add deterministic week-by-week analytics and display week-by-week focus totals.
+- [x] Expand tests for all added behaviors and configure a local coverage command.
+- [x] Run the full test suite, coverage report, TypeScript check, production build, and responsive/offline verification.

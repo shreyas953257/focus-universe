@@ -22,20 +22,25 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { CSSProperties, FormEvent, PointerEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   FOCUS_XP,
   GOAL_XP,
   STORAGE_KEY,
   calculateStreak as calculateProductivityStreak,
+  confirmFocusUniverseImport,
   completeTimerSession,
+  createFocusUniverseExport,
   createFocusTimer,
   dailyFocusMinutes,
   deleteDailyGoal,
   editDailyGoal,
+  filterAndSortUnlockHistory,
   levelForXp as productivityLevelForXp,
   levelProgress as productivityLevelProgress,
   loadProductivityState,
+  monthlyFocusMinutes,
+  parseFocusUniverseExport,
   saveProductivityState,
   resetAllProgress,
   recordUniverseUnlocks,
@@ -43,8 +48,10 @@ import {
   toggleDailyGoal,
   universeProgress,
   universeUnlockEvents,
-  monthlyFocusMinutes,
+  weeklyFocusTotals,
   type FocusTimer,
+  type UnlockHistoryFilter,
+  type UnlockHistorySort,
   type UniverseUnlockHistoryRecord,
   type UniverseUnlockEvent,
 } from "@/lib/productivity";
@@ -76,6 +83,7 @@ type FocusUniverseState = {
   productiveDates: Record<string, true>;
   announcedUnlocks: string[];
   unlockHistory: UniverseUnlockHistoryRecord[];
+  soundEnabled: boolean;
 };
 
 type CosmicEvent = {
@@ -92,6 +100,7 @@ const initialState: FocusUniverseState = {
   productiveDates: {},
   announcedUnlocks: [],
   unlockHistory: [],
+  soundEnabled: false,
 };
 
 function dateKey(input: Date | string) {
@@ -208,6 +217,7 @@ function readState(): FocusUniverseState {
       productiveDates: parsed.productiveDates ?? {},
       announcedUnlocks: Array.isArray(parsed.announcedUnlocks) ? parsed.announcedUnlocks.filter((value): value is string => typeof value === "string") : [],
       unlockHistory: Array.isArray(parsed.unlockHistory) ? parsed.unlockHistory.filter((record): record is UniverseUnlockHistoryRecord => Boolean(record) && typeof record.id === "string" && typeof record.title === "string" && typeof record.detail === "string" && typeof record.unlockedAt === "string") : [],
+      soundEnabled: parsed.soundEnabled === true,
     };
   } catch {
     return initialState;
@@ -249,7 +259,11 @@ export default function Home() {
   const [levelUp, setLevelUp] = useState<number | null>(null);
   const [cosmicEvent, setCosmicEvent] = useState<CosmicEvent | null>(null);
   const [unlockQueue, setUnlockQueue] = useState<UniverseUnlockEvent[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<UnlockHistoryFilter>("all");
+  const [historySort, setHistorySort] = useState<UnlockHistorySort>("newest");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const [universeTilt, setUniverseTilt] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState("Mission control");
 
@@ -262,6 +276,28 @@ export default function Home() {
     const interval = window.setInterval(() => setSecondsLeft((seconds) => tickFocusTimer({ durationMinutes: duration, secondsLeft: seconds, status: "running" }).secondsLeft), 1000);
     return () => window.clearInterval(interval);
   }, [isRunning]);
+
+  const playLocalTone = (signal: "focus" | "xp" | "level" | "unlock") => {
+    if (!state.soundEnabled || typeof window === "undefined") return;
+    try {
+      const context = audioContextRef.current ?? new window.AudioContext();
+      audioContextRef.current = context;
+      if (context.state === "suspended") void context.resume();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const now = context.currentTime;
+      oscillator.frequency.setValueAtTime({ focus: 392, xp: 523, level: 659, unlock: 784 }[signal], now);
+      oscillator.type = signal === "level" ? "sine" : "triangle";
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.045, now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.23);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.24);
+    } catch {
+      // Optional local audio never blocks the productivity workflow.
+    }
+  };
 
   const triggerCosmicEvent = (kind: CosmicEvent["kind"], title: string, detail: string) => {
     const id = Date.now();
@@ -301,6 +337,8 @@ export default function Home() {
     setActiveSessionId(null);
     setState((previous) => recordUniverseUnlocks(completeTimerSession(previous, completedTimer, session).state, newUnlocks, timestamp));
     if (newUnlocks.length) setUnlockQueue((events) => [...events, ...newUnlocks]);
+    playLocalTone("focus");
+    playLocalTone("xp");
     const beforeLevel = levelForXp(state.xp);
     const afterLevel = levelForXp(state.xp + FOCUS_XP);
     setXpPulse(FOCUS_XP);
@@ -310,8 +348,10 @@ export default function Home() {
       setNotice(`Level ${afterLevel} reached. Your universe has expanded.`);
       window.setTimeout(() => setLevelUp(null), 3800);
       triggerCosmicEvent("level", `Observer level ${afterLevel}`, "A wider orbit has opened in your universe.");
+      playLocalTone("level");
     } else if (newUnlocks.length) {
       setNotice(newUnlocks[0].detail);
+      playLocalTone("unlock");
     } else {
       setNotice(`Session complete. +${FOCUS_XP} XP recorded in your constellation.`);
       triggerCosmicEvent("session", "Orbit complete", "The session has been recorded in your constellation.");
@@ -346,6 +386,8 @@ export default function Home() {
   const planetCount = universe.planets;
   const moonCount = universe.moons;
   const showComet = universe.cometUnlocked;
+  const historyRecords = useMemo(() => filterAndSortUnlockHistory(state.unlockHistory, historyFilter, historySort), [state.unlockHistory, historyFilter, historySort]);
+  const weeklyTotals = useMemo(() => weeklyFocusTotals(state.sessions), [state.sessions]);
 
   const timerProgress = Math.max(0, Math.min(1, 1 - secondsLeft / (duration * 60)));
   const timerDash = 2 * Math.PI * 118;
@@ -386,13 +428,16 @@ export default function Home() {
       const afterLevel = levelForXp(state.xp + xpGain);
       setXpPulse(GOAL_XP);
       window.setTimeout(() => setXpPulse(null), 1500);
+      playLocalTone("xp");
       if (afterLevel > beforeLevel) {
         setLevelUp(afterLevel);
         setNotice(`Level ${afterLevel} reached. A new orbit has opened.`);
         window.setTimeout(() => setLevelUp(null), 3800);
         triggerCosmicEvent("level", `Observer level ${afterLevel}`, "A wider orbit has opened in your universe.");
+        playLocalTone("level");
       } else if (newUnlocks.length) {
         setNotice(newUnlocks[0].detail);
+        playLocalTone("unlock");
       } else {
         setNotice(`Goal complete. +${GOAL_XP} XP added to your record.`);
         triggerCosmicEvent("xp", "Energy gathered", `+${GOAL_XP} XP has been added to your record.`);
@@ -424,6 +469,34 @@ export default function Home() {
     setDuration(25);
     setSecondsLeft(25 * 60);
     setNotice("All saved progress has been cleared from this device.");
+  };
+
+  const exportProgress = () => {
+    const blob = new Blob([createFocusUniverseExport(state)], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `focus-universe-backup-${dateKey(new Date())}.json`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+    setNotice("Local backup exported. No data left this device.");
+  };
+
+  const importProgress = async (file: File | undefined) => {
+    if (!file) return;
+    const content = await file.text();
+    if (!parseFocusUniverseExport(content)) {
+      setNotice("Import rejected. Select a valid Focus Universe backup file.");
+      return;
+    }
+    const imported = confirmFocusUniverseImport(content, () => window.confirm("Replace all current Focus Universe progress with this local backup?"));
+    if (!imported) return;
+    setState(imported);
+    setIsRunning(false);
+    setActiveSessionId(null);
+    setDuration(25);
+    setSecondsLeft(25 * 60);
+    setNotice("Local backup restored to this device.");
   };
 
   const scrollTo = (id: string, label: string) => {
@@ -542,7 +615,7 @@ export default function Home() {
               </div>
               <span className="sector-node">SECTOR β·{String(universeLevel).padStart(2, "0")}</span>
               <div className="universe-legend"><span><i className="legend-star" /> {starCount} stars</span><span><i className="legend-orbit" /> {planetCount} planets</span></div>
-              {cosmicEvent && <div className={`universe-event event-${cosmicEvent.kind}`} key={cosmicEvent.id} aria-live="polite"><i /><i /><div><small>{cosmicEvent.kind === "unlock" ? "Cosmic object unlocked" : cosmicEvent.kind === "level" ? "Level increase" : "Productivity signal"}</small><strong>{cosmicEvent.title}</strong><span>{cosmicEvent.detail}</span></div></div>}
+              {cosmicEvent && <div className={`universe-event event-${cosmicEvent.kind}`} key={cosmicEvent.id} role="status" aria-live="polite"><i /><i /><div><button className="dismiss-event" type="button" onClick={() => setCosmicEvent(null)} aria-label="Dismiss milestone notification"><X size={13} /></button><small>{cosmicEvent.kind === "unlock" ? "Cosmic object unlocked" : cosmicEvent.kind === "level" ? "Level increase" : "Productivity signal"}</small><strong>{cosmicEvent.title}</strong><span>{cosmicEvent.detail}</span></div></div>}
             </div>
             <div className="universe-footer">
               <div><p>Next object</p><strong>{planetCount === 0 ? "First planet" : moonCount === 0 ? "Companion moon" : showComet ? "Outer orbit" : "Streak comet"}</strong></div>
@@ -577,6 +650,9 @@ export default function Home() {
               <div><span>Goals complete</span><strong>{state.goals.filter((goal) => goal.completed).length}</strong></div>
               <button type="button" onClick={() => setNotice("Analytics reflect every completed session and goal saved on this device.")}>View signal <ChevronRight size={16} /></button>
             </div>
+            <div className="weekly-totals" aria-label="Focus totals by week">
+              {weeklyTotals.map((week) => <div key={week.label}><span>{week.label}</span><strong>{formatMinutes(week.minutes)}</strong><small>{week.start.slice(5)}–{week.end.slice(5)}</small></div>)}
+            </div>
           </article>
 
           <article className="level-panel glass-panel">
@@ -591,11 +667,23 @@ export default function Home() {
             <div><p className="eyebrow">Discovery archive</p><h2>Unlock history</h2></div>
             <div className="instrument-status"><span>ARCHIVE U·01</span><span className="metric-note">{state.unlockHistory.length} discovered</span></div>
           </div>
-          {state.unlockHistory.length === 0 ? (
+          <div className="history-controls" aria-label="Unlock History controls">
+            <div className="history-filter-group" role="group" aria-label="Filter unlock history">
+              {(["all", "star", "planet", "moon", "comet", "sector"] as UnlockHistoryFilter[]).map((filter) => <button type="button" key={filter} className={historyFilter === filter ? "is-active" : ""} aria-pressed={historyFilter === filter} onClick={() => setHistoryFilter(filter)}>{filter === "all" ? "All" : `${filter[0].toUpperCase()}${filter.slice(1)}${filter === "sector" ? "s" : ""}`}</button>)}
+            </div>
+            <label className="history-sort"><span>Sort</span><select value={historySort} onChange={(event) => setHistorySort(event.target.value as UnlockHistorySort)} aria-label="Sort unlock history"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="type">Object type</option></select></label>
+          </div>
+          <div className="local-data-tools" aria-label="Local data tools">
+            <button type="button" onClick={exportProgress}>Export backup</button>
+            <button type="button" onClick={() => importInputRef.current?.click()}>Import backup</button>
+            <input ref={importInputRef} type="file" accept="application/json" className="visually-hidden" aria-label="Import Focus Universe backup" onChange={(event) => { void importProgress(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+            <button type="button" className={state.soundEnabled ? "sound-toggle is-on" : "sound-toggle"} aria-pressed={state.soundEnabled} onClick={() => { const next = !state.soundEnabled; setState((previous) => ({ ...previous, soundEnabled: next })); setNotice(next ? "Local milestone sounds enabled." : "Local milestone sounds muted."); if (next) { try { const context = audioContextRef.current ?? new window.AudioContext(); audioContextRef.current = context; void context.resume(); } catch { /* Optional browser audio may remain unavailable. */ } } }}>{state.soundEnabled ? "Sound on" : "Sound off"}</button>
+          </div>
+          {historyRecords.length === 0 ? (
             <div className="unlock-history-empty"><Sparkles size={20} /><p>Your discovery archive is waiting for its first signal.</p></div>
           ) : (
             <div className="unlock-history-list">
-              {[...state.unlockHistory].reverse().map((record) => (
+              {historyRecords.map((record) => (
                 <article className="unlock-history-row" key={record.id}>
                   <span className={`history-glyph history-${record.id.split("-")[0]}`} aria-hidden="true" />
                   <div><strong>{record.title}</strong><p>{record.detail}</p></div>
@@ -636,7 +724,7 @@ export default function Home() {
       </main>
 
       {xpPulse !== null && <div className="xp-pulse" aria-live="polite"><Zap size={17} fill="currentColor" /> +{xpPulse} XP</div>}
-      {levelUp !== null && <div className="level-up" role="status"><img src={LOGO_IMAGE} alt="" /><p>New level detected</p><strong>Observer level {levelUp}</strong><span>Your universe has opened a new orbit.</span></div>}
+      {levelUp !== null && <div className="level-up" role="status" aria-live="polite"><button className="dismiss-level" type="button" onClick={() => setLevelUp(null)} aria-label="Dismiss level-up notification"><X size={16} /></button><img src={LOGO_IMAGE} alt="" /><p>New level detected</p><strong>Observer level {levelUp}</strong><span>Your universe has opened a new orbit.</span></div>}
     </div>
   );
 }

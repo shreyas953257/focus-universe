@@ -3,17 +3,21 @@ import {
   FOCUS_XP,
   GOAL_XP,
   calculateStreak,
+  confirmFocusUniverseImport,
   completeDailyGoal,
   completeTimerSession,
+  createFocusUniverseExport,
   createFocusTimer,
   dailyFocusMinutes,
   deleteDailyGoal,
   editDailyGoal,
+  filterAndSortUnlockHistory,
   initialProductivityState,
   levelForXp,
   levelProgress,
   loadProductivityState,
   pauseFocusTimer,
+  parseFocusUniverseExport,
   resetFocusTimer,
   resetAllProgress,
   resumeFocusTimer,
@@ -24,6 +28,7 @@ import {
   recordUniverseUnlocks,
   universeProgress,
   universeUnlockEvents,
+  weeklyFocusTotals,
   monthlyFocusMinutes,
   type FocusTimer,
   type StorageLike,
@@ -300,5 +305,60 @@ describe("Focus Universe Unlock History", () => {
 
     saveProductivityState(storage, recorded);
     expect(loadProductivityState(storage).unlockHistory).toEqual(recorded.unlockHistory);
+  });
+});
+
+describe("Focus Universe v1 local tools", () => {
+  const history = [
+    { id: "planet-1", title: "Planet detected", detail: "A world entered orbit.", unlockedAt: "2026-08-21T10:00:00.000Z" },
+    { id: "star-12", title: "Star ignited", detail: "A star joined.", unlockedAt: "2026-08-22T10:00:00.000Z" },
+    { id: "comet", title: "Comet detected", detail: "A streak lit the sky.", unlockedAt: "2026-08-20T10:00:00.000Z" },
+  ];
+
+  it("filters and sorts unlock history without mutating saved records", () => {
+    const snapshot = JSON.stringify(history);
+
+    expect(filterAndSortUnlockHistory(history, "planet", "newest").map((record) => record.id)).toEqual(["planet-1"]);
+    expect(filterAndSortUnlockHistory(history, "all", "oldest").map((record) => record.id)).toEqual(["comet", "planet-1", "star-12"]);
+    expect(filterAndSortUnlockHistory(history, "all", "type").map((record) => record.id)).toEqual(["comet", "planet-1", "star-12"]);
+    expect(JSON.stringify(history)).toBe(snapshot);
+  });
+
+  it("exports valid local data and restores it only after confirmation", () => {
+    const progress = { ...initialProductivityState, xp: 350, soundEnabled: true, unlockHistory: history };
+    const backup = createFocusUniverseExport(progress, "2026-08-22T12:00:00.000Z");
+    const decline = vi.fn(() => false);
+    const accept = vi.fn(() => true);
+
+    expect(parseFocusUniverseExport(backup)).toEqual(progress);
+    expect(confirmFocusUniverseImport(backup, decline)).toBeNull();
+    expect(decline).toHaveBeenCalledTimes(1);
+    expect(confirmFocusUniverseImport(backup, accept)).toEqual(progress);
+    expect(accept).toHaveBeenCalledTimes(1);
+  });
+
+  it("safely rejects invalid or corrupted backup content", () => {
+    expect(parseFocusUniverseExport("not valid json")).toBeNull();
+    expect(parseFocusUniverseExport(JSON.stringify({ format: "focus-universe-backup-v1", progress: { xp: -1 } }))).toBeNull();
+    expect(confirmFocusUniverseImport("{}", vi.fn(() => true))).toBeNull();
+  });
+
+  it("persists an enabled local sound preference with all progress data", () => {
+    const storage = createMemoryStorage();
+    saveProductivityState(storage, { ...initialProductivityState, soundEnabled: true });
+    expect(loadProductivityState(storage).soundEnabled).toBe(true);
+  });
+
+  it("aggregates deterministic focus totals across four complete seven-day windows", () => {
+    const sessions = [
+      { id: "w1", completedAt: "2026-07-29T10:00:00.000Z", durationMinutes: 10 },
+      { id: "w2", completedAt: "2026-08-05T10:00:00.000Z", durationMinutes: 20 },
+      { id: "w3", completedAt: "2026-08-12T10:00:00.000Z", durationMinutes: 30 },
+      { id: "w4", completedAt: "2026-08-22T10:00:00.000Z", durationMinutes: 40 },
+    ];
+    const totals = weeklyFocusTotals(sessions, new Date("2026-08-22T12:00:00.000Z"));
+
+    expect(totals.map((week) => week.minutes)).toEqual([10, 20, 30, 40]);
+    expect(totals.map((week) => week.label)).toEqual(["W1", "W2", "W3", "W4"]);
   });
 });
