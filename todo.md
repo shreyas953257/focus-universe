@@ -1,0 +1,4 @@
+- [x] Add subtle multi-depth star and particle motion that remains lightweight on mobile.
+- [x] Refine slow orbital and planetary movement without changing the existing visual structure.
+- [x] Add cinematic completion, XP, level-up, and cosmic-unlock feedback states.
+- [x] Verify desktop and mobile motion behavior, including reduced-motion support.

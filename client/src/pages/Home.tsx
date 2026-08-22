@@ -54,6 +54,13 @@ type FocusUniverseState = {
   productiveDates: Record<string, true>;
 };
 
+type CosmicEvent = {
+  id: number;
+  kind: "session" | "xp" | "level" | "unlock";
+  title: string;
+  detail: string;
+};
+
 const initialState: FocusUniverseState = {
   xp: 0,
   sessions: [],
@@ -100,6 +107,24 @@ function levelProgress(xp: number) {
     remaining: nextFloor - xp,
     percent: Math.min(100, Math.max(0, (inLevel / (nextFloor - currentFloor)) * 100)),
   };
+}
+
+function cosmicSnapshot(xp: number, streak: number) {
+  const level = levelForXp(xp);
+  return {
+    stars: Math.min(42, 9 + Math.floor(xp / 55)),
+    planets: Math.min(4, Math.floor(xp / 300)),
+    moons: Math.max(0, Math.floor((level - 2) / 2)),
+    comet: streak >= 3,
+  };
+}
+
+function cosmicUnlock(before: ReturnType<typeof cosmicSnapshot>, after: ReturnType<typeof cosmicSnapshot>) {
+  if (after.planets > before.planets) return { title: "Planet detected", detail: "A new world has settled into your orbit." };
+  if (after.moons > before.moons) return { title: "Moon detected", detail: "A companion moon now circles your sector." };
+  if (after.comet && !before.comet) return { title: "Comet detected", detail: "Your three-day focus streak has lit the outer sky." };
+  if (after.stars > before.stars) return { title: "Star ignited", detail: "A new point of light has joined your constellation." };
+  return null;
 }
 
 function calculateStreak(productiveDates: Record<string, true>) {
@@ -199,6 +224,7 @@ export default function Home() {
   const [notice, setNotice] = useState("Your observatory is ready for a new orbit.");
   const [xpPulse, setXpPulse] = useState<number | null>(null);
   const [levelUp, setLevelUp] = useState<number | null>(null);
+  const [cosmicEvent, setCosmicEvent] = useState<CosmicEvent | null>(null);
   const [activeView, setActiveView] = useState("Mission control");
 
   useEffect(() => {
@@ -211,15 +237,25 @@ export default function Home() {
     return () => window.clearInterval(interval);
   }, [isRunning]);
 
+  const triggerCosmicEvent = (kind: CosmicEvent["kind"], title: string, detail: string) => {
+    const id = Date.now();
+    setCosmicEvent({ id, kind, title, detail });
+    window.setTimeout(() => setCosmicEvent((event) => event?.id === id ? null : event), kind === "level" ? 3600 : 2600);
+  };
+
   const completeFocus = () => {
     const timestamp = new Date().toISOString();
+    const beforeCosmos = cosmicSnapshot(state.xp, calculateStreak(state.productiveDates).current);
+    const productiveDates: Record<string, true> = { ...state.productiveDates, [dateKey(timestamp)]: true };
+    const afterCosmos = cosmicSnapshot(state.xp + FOCUS_XP, calculateStreak(productiveDates).current);
+    const newObject = cosmicUnlock(beforeCosmos, afterCosmos);
     setIsRunning(false);
     setSecondsLeft(duration * 60);
     setState((previous) => ({
       ...previous,
       xp: previous.xp + FOCUS_XP,
       sessions: [...previous.sessions, { id: randomId(), completedAt: timestamp, durationMinutes: duration }],
-      productiveDates: { ...previous.productiveDates, [dateKey(timestamp)]: true },
+      productiveDates,
     }));
     const beforeLevel = levelForXp(state.xp);
     const afterLevel = levelForXp(state.xp + FOCUS_XP);
@@ -229,8 +265,13 @@ export default function Home() {
       setLevelUp(afterLevel);
       setNotice(`Level ${afterLevel} reached. Your universe has expanded.`);
       window.setTimeout(() => setLevelUp(null), 3800);
+      triggerCosmicEvent("level", `Observer level ${afterLevel}`, "A wider orbit has opened in your universe.");
+    } else if (newObject) {
+      setNotice(newObject.detail);
+      triggerCosmicEvent("unlock", newObject.title, newObject.detail);
     } else {
       setNotice(`Session complete. +${FOCUS_XP} XP recorded in your constellation.`);
+      triggerCosmicEvent("session", "Orbit complete", "The session has been recorded in your constellation.");
     }
   };
 
@@ -288,15 +329,19 @@ export default function Home() {
     if (!goal) return;
     const completing = !goal.completed;
     const now = new Date().toISOString();
+    const xpGain = completing && !goal.xpAwarded ? GOAL_XP : 0;
+    const beforeCosmos = cosmicSnapshot(state.xp, calculateStreak(state.productiveDates).current);
+    const productiveDates: Record<string, true> = completing ? { ...state.productiveDates, [dateKey(now)]: true } : state.productiveDates;
+    const afterCosmos = cosmicSnapshot(state.xp + xpGain, calculateStreak(productiveDates).current);
+    const newObject = cosmicUnlock(beforeCosmos, afterCosmos);
     setState((previous) => ({
       ...previous,
       goals: previous.goals.map((item) => item.id === id
         ? { ...item, completed: completing, completedAt: completing ? (item.completedAt ?? now) : item.completedAt, xpAwarded: completing ? true : item.xpAwarded }
         : item),
-      productiveDates: completing ? { ...previous.productiveDates, [dateKey(now)]: true } : previous.productiveDates,
-      xp: completing && !goal.xpAwarded ? previous.xp + GOAL_XP : previous.xp,
+      productiveDates,
+      xp: previous.xp + xpGain,
     }));
-    const xpGain = completing && !goal.xpAwarded ? GOAL_XP : 0;
     if (xpGain) {
       const beforeLevel = levelForXp(state.xp);
       const afterLevel = levelForXp(state.xp + xpGain);
@@ -306,8 +351,13 @@ export default function Home() {
         setLevelUp(afterLevel);
         setNotice(`Level ${afterLevel} reached. A new orbit has opened.`);
         window.setTimeout(() => setLevelUp(null), 3800);
+        triggerCosmicEvent("level", `Observer level ${afterLevel}`, "A wider orbit has opened in your universe.");
+      } else if (newObject) {
+        setNotice(newObject.detail);
+        triggerCosmicEvent("unlock", newObject.title, newObject.detail);
       } else {
         setNotice(`Goal complete. +${GOAL_XP} XP added to your record.`);
+        triggerCosmicEvent("xp", "Energy gathered", `+${GOAL_XP} XP has been added to your record.`);
       }
     } else {
       setNotice(completing ? "Goal marked complete." : "Goal returned to your flight plan.");
@@ -346,6 +396,9 @@ export default function Home() {
     <div className="focus-universe-shell">
       <div className="deep-space" aria-hidden="true" style={{ backgroundImage: `url(${NEBULA_IMAGE})` }} />
       <div className="star-dust" aria-hidden="true" />
+      <div className="stellar-field" aria-hidden="true">
+        {Array.from({ length: 18 }, (_, index) => <i key={index} className={`ambient-star ambient-star-${index % 4}`} style={{ left: `${(index * 29 + 7) % 97}%`, top: `${(index * 47 + 11) % 91}%`, animationDelay: `${(index % 9) * -1.1}s`, animationDuration: `${8 + (index % 5) * 2}s` }} />)}
+      </div>
       <aside className="side-rail" aria-label="Primary navigation">
         <button className="brand-lockup" type="button" onClick={() => scrollTo("mission-control", "Mission control")} aria-label="Focus Universe home">
           <img src={LOGO_IMAGE} alt="" className="brand-mark" />
@@ -382,7 +435,7 @@ export default function Home() {
         </header>
 
         <section className="main-orbit" aria-label="Focus session and universe overview">
-          <article className="timer-panel glass-panel">
+          <article className={`timer-panel glass-panel ${cosmicEvent?.kind === "session" ? "is-celebrating" : ""}`}>
             <div className="panel-heading">
               <div>
                 <p className="eyebrow">Current orbit</p>
@@ -420,8 +473,9 @@ export default function Home() {
             </div>
           </article>
 
-          <article className="universe-panel" id="universe">
-            <div className="universe-visual" style={{ backgroundImage: `linear-gradient(180deg, rgba(3, 8, 24, 0.05), rgba(3, 8, 24, 0.72)), url(${PLANET_IMAGE})` }}>
+          <article className={`universe-panel ${cosmicEvent ? `is-reacting is-${cosmicEvent.kind}` : ""}`} id="universe">
+            <div className="universe-visual">
+              <div className="planet-atmosphere" aria-hidden="true" style={{ backgroundImage: `linear-gradient(180deg, rgba(3, 8, 24, 0.05), rgba(3, 8, 24, 0.72)), url(${PLANET_IMAGE})` }} />
               <div className="orbit orbit-one" />
               <div className="orbit orbit-two" />
               {Array.from({ length: starCount }, (_, index) => <i className={`universe-star star-${index % 6}`} key={index} style={{ left: `${(index * 37 + 9) % 93}%`, top: `${(index * 53 + 5) % 86}%`, animationDelay: `${(index % 8) * 0.7}s` }} />)}
@@ -436,6 +490,7 @@ export default function Home() {
               </div>
               <span className="sector-node">SECTOR β·{String(universeLevel).padStart(2, "0")}</span>
               <div className="universe-legend"><span><i className="legend-star" /> {starCount} stars</span><span><i className="legend-orbit" /> {planetCount} planets</span></div>
+              {cosmicEvent && <div className={`universe-event event-${cosmicEvent.kind}`} key={cosmicEvent.id} aria-live="polite"><i /><i /><div><small>{cosmicEvent.kind === "unlock" ? "Cosmic object unlocked" : cosmicEvent.kind === "level" ? "Level increase" : "Productivity signal"}</small><strong>{cosmicEvent.title}</strong><span>{cosmicEvent.detail}</span></div></div>}
             </div>
             <div className="universe-footer">
               <div><p>Next object</p><strong>{planetCount === 0 ? "First planet" : moonCount === 0 ? "Companion moon" : showComet ? "Outer orbit" : "Streak comet"}</strong></div>
