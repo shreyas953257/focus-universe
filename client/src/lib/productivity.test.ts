@@ -6,6 +6,7 @@ import {
   completeDailyGoal,
   completeTimerSession,
   createFocusTimer,
+  dailyFocusMinutes,
   deleteDailyGoal,
   editDailyGoal,
   initialProductivityState,
@@ -19,6 +20,8 @@ import {
   saveProductivityState,
   startFocusTimer,
   tickFocusTimer,
+  toggleDailyGoal,
+  monthlyFocusMinutes,
   type FocusTimer,
   type StorageLike,
 } from "./productivity";
@@ -169,5 +172,40 @@ describe("Focus Universe goal and reset management", () => {
     expect(decline).toHaveBeenCalledTimes(1);
     expect(resetAllProgress(accept)).toEqual(initialProductivityState);
     expect(accept).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Focus Universe goal idempotency and analytics", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("toggles a goal completion while awarding its XP only once", () => {
+    const state = {
+      ...initialProductivityState,
+      goals: [{ id: "goal-1", title: "Ship the draft", completed: false, createdAt: "2026-08-22T09:00:00.000Z" }],
+    };
+    const firstCompletion = toggleDailyGoal(state, "goal-1", "2026-08-22T10:00:00.000Z");
+    const toggledOff = toggleDailyGoal(firstCompletion.state, "goal-1", "2026-08-22T10:05:00.000Z");
+    const secondCompletion = toggleDailyGoal(toggledOff.state, "goal-1", "2026-08-22T10:10:00.000Z");
+
+    expect(firstCompletion.awarded).toBe(true);
+    expect(firstCompletion.state.xp).toBe(GOAL_XP);
+    expect(toggledOff.awarded).toBe(false);
+    expect(toggledOff.state.goals[0].completed).toBe(false);
+    expect(secondCompletion.awarded).toBe(false);
+    expect(secondCompletion.state.goals[0].completed).toBe(true);
+    expect(secondCompletion.state.xp).toBe(GOAL_XP);
+  });
+
+  it("calculates daily and monthly focus with a fake current date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-22T12:00:00.000Z"));
+    const sessions = [
+      { id: "today", completedAt: "2026-08-22T08:00:00.000Z", durationMinutes: 25 },
+      { id: "this-month", completedAt: "2026-08-05T12:00:00.000Z", durationMinutes: 20 },
+      { id: "outside-window", completedAt: "2026-07-20T12:00:00.000Z", durationMinutes: 30 },
+    ];
+
+    expect(dailyFocusMinutes(sessions)).toBe(25);
+    expect(monthlyFocusMinutes(sessions)).toBe(45);
   });
 });

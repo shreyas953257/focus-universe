@@ -17,3 +17,8 @@
 - [x] Add deterministic goal editing, deletion, and reset-confirmation helpers to the local productivity domain.
 - [x] Add Vitest coverage for goal editing, deletion, and accepted or declined reset confirmation.
 - [x] Run the complete suite, type check, and production build.
+
+## Goal idempotency and analytics tests
+- [x] Add deterministic analytics helpers while preserving the current dashboard calculations.
+- [x] Add Vitest coverage for goal-completion XP idempotency and daily/monthly analytics.
+- [x] Run the complete test suite, TypeScript check, and production build.

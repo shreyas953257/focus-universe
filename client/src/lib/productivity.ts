@@ -153,15 +153,24 @@ export function completeDailyGoal(state: FocusUniverseState, goalId: string, com
   const goal = state.goals.find((item) => item.id === goalId);
   if (!goal || goal.completed) return { state, awarded: false };
 
+  const awarded = !goal.xpAwarded;
+
   return {
-    awarded: true,
+    awarded,
     state: {
       ...state,
-      xp: state.xp + GOAL_XP,
+      xp: state.xp + (awarded ? GOAL_XP : 0),
       productiveDates: { ...state.productiveDates, [dateKey(completedAt)]: true } as Record<string, true>,
       goals: state.goals.map((item) => item.id === goalId ? { ...item, completed: true, completedAt, xpAwarded: true } : item),
     },
   };
+}
+
+export function toggleDailyGoal(state: FocusUniverseState, goalId: string, completedAt: string): { state: FocusUniverseState; awarded: boolean } {
+  const goal = state.goals.find((item) => item.id === goalId);
+  if (!goal) return { state, awarded: false };
+  if (!goal.completed) return completeDailyGoal(state, goalId, completedAt);
+  return { state: { ...state, goals: state.goals.map((item) => item.id === goalId ? { ...item, completed: false } : item) }, awarded: false };
 }
 
 export function editDailyGoal(state: FocusUniverseState, goalId: string, title: string): FocusUniverseState {
@@ -178,6 +187,18 @@ export function deleteDailyGoal(state: FocusUniverseState, goalId: string): Focu
 export function resetAllProgress(confirmReset: () => boolean): FocusUniverseState | null {
   if (!confirmReset()) return null;
   return { xp: 0, sessions: [], goals: [], productiveDates: {} };
+}
+
+export function dailyFocusMinutes(sessions: FocusSession[], now = new Date()) {
+  const today = dateKey(now);
+  return sessions.filter((session) => dateKey(session.completedAt) === today).reduce((total, session) => total + session.durationMinutes, 0);
+}
+
+export function monthlyFocusMinutes(sessions: FocusSession[], now = new Date()) {
+  const cutoff = new Date(now);
+  cutoff.setHours(12, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - 29);
+  return sessions.filter((session) => new Date(session.completedAt) >= cutoff).reduce((total, session) => total + session.durationMinutes, 0);
 }
 
 export function loadProductivityState(storage: StorageLike): FocusUniverseState {

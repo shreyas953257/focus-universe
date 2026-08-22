@@ -30,6 +30,7 @@ import {
   calculateStreak as calculateProductivityStreak,
   completeTimerSession,
   createFocusTimer,
+  dailyFocusMinutes,
   deleteDailyGoal,
   editDailyGoal,
   levelForXp as productivityLevelForXp,
@@ -38,6 +39,8 @@ import {
   saveProductivityState,
   resetAllProgress,
   tickFocusTimer,
+  toggleDailyGoal,
+  monthlyFocusMinutes,
   type FocusTimer,
 } from "@/lib/productivity";
 
@@ -304,7 +307,7 @@ export default function Home() {
   const streak = useMemo(() => calculateProductivityStreak(state.productiveDates), [state.productiveDates]);
   const today = dateKey(new Date());
   const todaySessions = useMemo(() => state.sessions.filter((session) => dateKey(session.completedAt) === today), [state.sessions, today]);
-  const todayFocus = todaySessions.reduce((total, session) => total + session.durationMinutes, 0);
+  const todayFocus = dailyFocusMinutes(state.sessions);
   const todayGoals = state.goals.filter((goal) => dateKey(goal.createdAt) === today);
   const completeGoals = todayGoals.filter((goal) => goal.completed).length;
   const weeklyData = useMemo(() => getWeekDays().map((date) => {
@@ -315,7 +318,7 @@ export default function Home() {
     };
   }), [state.sessions]);
   const weeklyFocus = weeklyData.reduce((total, day) => total + day.minutes, 0);
-  const monthlyFocus = state.sessions.filter((session) => new Date(session.completedAt) >= dayOffset(29)).reduce((total, session) => total + session.durationMinutes, 0);
+  const monthlyFocus = monthlyFocusMinutes(state.sessions);
   const universeLevel = Math.max(1, Math.ceil(progress.level / 2));
   const starCount = Math.min(42, 9 + Math.floor(state.xp / 55));
   const planetCount = Math.min(4, Math.floor(state.xp / 300));
@@ -348,19 +351,13 @@ export default function Home() {
     if (!goal) return;
     const completing = !goal.completed;
     const now = new Date().toISOString();
-    const xpGain = completing && !goal.xpAwarded ? GOAL_XP : 0;
+    const transition = toggleDailyGoal(state, id, now);
+    const xpGain = transition.awarded ? GOAL_XP : 0;
     const beforeCosmos = cosmicSnapshot(state.xp, calculateStreak(state.productiveDates).current);
-    const productiveDates: Record<string, true> = completing ? { ...state.productiveDates, [dateKey(now)]: true } : state.productiveDates;
+    const productiveDates = transition.state.productiveDates;
     const afterCosmos = cosmicSnapshot(state.xp + xpGain, calculateStreak(productiveDates).current);
     const newObject = cosmicUnlock(beforeCosmos, afterCosmos);
-    setState((previous) => ({
-      ...previous,
-      goals: previous.goals.map((item) => item.id === id
-        ? { ...item, completed: completing, completedAt: completing ? (item.completedAt ?? now) : item.completedAt, xpAwarded: completing ? true : item.xpAwarded }
-        : item),
-      productiveDates,
-      xp: previous.xp + xpGain,
-    }));
+    setState((previous) => toggleDailyGoal(previous, id, now).state);
     if (xpGain) {
       const beforeLevel = levelForXp(state.xp);
       const afterLevel = levelForXp(state.xp + xpGain);
