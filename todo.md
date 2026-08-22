@@ -7,3 +7,8 @@
 - [x] Inspect current motion and milestone feedback against the requested cinematic behavior.
 - [x] Add targeted refinements without changing the app’s layout, features, or local-first architecture.
 - [x] Run existing checks and validate desktop, mobile, and reduced-motion behavior.
+
+## Automated productivity tests
+- [x] Extract pure timer and productivity state logic while preserving current application behavior.
+- [x] Add fake-timer tests for timer controls, completion, XP, levels, streaks, and persistence.
+- [x] Add the npm test command and run the full automated suite plus build checks.

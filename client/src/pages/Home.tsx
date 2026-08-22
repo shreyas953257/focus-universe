@@ -23,10 +23,21 @@ import {
   Zap,
 } from "lucide-react";
 import { CSSProperties, FormEvent, PointerEvent, useEffect, useMemo, useState } from "react";
+import {
+  FOCUS_XP,
+  GOAL_XP,
+  STORAGE_KEY,
+  calculateStreak as calculateProductivityStreak,
+  completeTimerSession,
+  createFocusTimer,
+  levelForXp as productivityLevelForXp,
+  levelProgress as productivityLevelProgress,
+  loadProductivityState,
+  saveProductivityState,
+  tickFocusTimer,
+  type FocusTimer,
+} from "@/lib/productivity";
 
-const STORAGE_KEY = "focus-universe-state-v1";
-const FOCUS_XP = 50;
-const GOAL_XP = 20;
 const NEBULA_IMAGE = "/manus-storage/focus-universe-nebula-hero_0d4c7968.jpg";
 const PLANET_IMAGE = "/manus-storage/focus-universe-orbital-planet_a011269a.jpg";
 const COMET_IMAGE = "/manus-storage/focus-universe-comet_a0367955.jpg";
@@ -225,16 +236,17 @@ export default function Home() {
   const [xpPulse, setXpPulse] = useState<number | null>(null);
   const [levelUp, setLevelUp] = useState<number | null>(null);
   const [cosmicEvent, setCosmicEvent] = useState<CosmicEvent | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [universeTilt, setUniverseTilt] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState("Mission control");
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    saveProductivityState(window.localStorage, state);
   }, [state]);
 
   useEffect(() => {
     if (!isRunning) return undefined;
-    const interval = window.setInterval(() => setSecondsLeft((seconds) => Math.max(0, seconds - 1)), 1000);
+    const interval = window.setInterval(() => setSecondsLeft((seconds) => tickFocusTimer({ durationMinutes: duration, secondsLeft: seconds, status: "running" }).secondsLeft), 1000);
     return () => window.clearInterval(interval);
   }, [isRunning]);
 
@@ -246,18 +258,21 @@ export default function Home() {
 
   const completeFocus = () => {
     const timestamp = new Date().toISOString();
+    const session = { id: activeSessionId ?? randomId(), completedAt: timestamp, durationMinutes: duration };
+    const completedTimer: FocusTimer = { durationMinutes: duration, secondsLeft: 0, status: "completed" };
+    const completion = completeTimerSession(state, completedTimer, session);
+    if (!completion.awarded) {
+      setIsRunning(false);
+      return;
+    }
     const beforeCosmos = cosmicSnapshot(state.xp, calculateStreak(state.productiveDates).current);
-    const productiveDates: Record<string, true> = { ...state.productiveDates, [dateKey(timestamp)]: true };
+    const productiveDates = completion.state.productiveDates;
     const afterCosmos = cosmicSnapshot(state.xp + FOCUS_XP, calculateStreak(productiveDates).current);
     const newObject = cosmicUnlock(beforeCosmos, afterCosmos);
     setIsRunning(false);
     setSecondsLeft(duration * 60);
-    setState((previous) => ({
-      ...previous,
-      xp: previous.xp + FOCUS_XP,
-      sessions: [...previous.sessions, { id: randomId(), completedAt: timestamp, durationMinutes: duration }],
-      productiveDates,
-    }));
+    setActiveSessionId(null);
+    setState((previous) => completeTimerSession(previous, completedTimer, session).state);
     const beforeLevel = levelForXp(state.xp);
     const afterLevel = levelForXp(state.xp + FOCUS_XP);
     setXpPulse(FOCUS_XP);
@@ -282,8 +297,8 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft, isRunning]);
 
-  const progress = useMemo(() => levelProgress(state.xp), [state.xp]);
-  const streak = useMemo(() => calculateStreak(state.productiveDates), [state.productiveDates]);
+  const progress = useMemo(() => productivityLevelProgress(state.xp), [state.xp]);
+  const streak = useMemo(() => calculateProductivityStreak(state.productiveDates), [state.productiveDates]);
   const today = dateKey(new Date());
   const todaySessions = useMemo(() => state.sessions.filter((session) => dateKey(session.completedAt) === today), [state.sessions, today]);
   const todayFocus = todaySessions.reduce((total, session) => total + session.durationMinutes, 0);
@@ -308,7 +323,7 @@ export default function Home() {
   const timerDash = 2 * Math.PI * 118;
 
   const changeDuration = (next: number) => {
-    const safe = Math.min(120, Math.max(1, Math.floor(next || 1)));
+    const safe = createFocusTimer(next).durationMinutes;
     setDuration(safe);
     if (!isRunning) setSecondsLeft(safe * 60);
   };
@@ -472,11 +487,11 @@ export default function Home() {
               </div>
               <div className="timer-controls">
                 <div className="timer-action-row">
-                  <button className="timer-action primary" type="button" onClick={() => setIsRunning((current) => !current)}>
+                  <button className="timer-action primary" type="button" onClick={() => { if (!isRunning && secondsLeft === duration * 60 && !activeSessionId) setActiveSessionId(randomId()); setIsRunning((current) => !current); }}>
                     {isRunning ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}
                     {isRunning ? "Pause orbit" : secondsLeft < duration * 60 ? "Resume orbit" : "Begin focus"}
                   </button>
-                  <button className="timer-action icon-only" type="button" onClick={() => { setIsRunning(false); setSecondsLeft(duration * 60); setNotice("The current orbit has been reset."); }} aria-label="Reset timer"><RotateCcw size={19} /></button>
+                  <button className="timer-action icon-only" type="button" onClick={() => { setIsRunning(false); setActiveSessionId(null); setSecondsLeft(createFocusTimer(duration).secondsLeft); setNotice("The current orbit has been reset."); }} aria-label="Reset timer"><RotateCcw size={19} /></button>
                 </div>
                 <label className="duration-control">
                   <span>Focus duration</span>

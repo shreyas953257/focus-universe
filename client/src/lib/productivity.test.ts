@@ -1,0 +1,131 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  FOCUS_XP,
+  GOAL_XP,
+  calculateStreak,
+  completeDailyGoal,
+  completeTimerSession,
+  createFocusTimer,
+  initialProductivityState,
+  levelForXp,
+  levelProgress,
+  loadProductivityState,
+  pauseFocusTimer,
+  resetFocusTimer,
+  resumeFocusTimer,
+  saveProductivityState,
+  startFocusTimer,
+  tickFocusTimer,
+  type FocusTimer,
+  type StorageLike,
+} from "./productivity";
+
+function runScheduledTimer(timer: FocusTimer) {
+  let current = timer;
+  const interval = setInterval(() => {
+    current = tickFocusTimer(current);
+  }, 1_000);
+  return { get timer() { return current; }, stop: () => clearInterval(interval) };
+}
+
+function createMemoryStorage(): StorageLike {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+}
+
+describe("Focus Universe timer", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("starts a 25-minute focus session and completes immediately under fake timers", () => {
+    const runner = runScheduledTimer(startFocusTimer(createFocusTimer(25)));
+
+    expect(runner.timer.status).toBe("running");
+    expect(runner.timer.secondsLeft).toBe(1_500);
+    vi.advanceTimersByTime(25 * 60 * 1_000);
+
+    expect(runner.timer.status).toBe("completed");
+    expect(runner.timer.secondsLeft).toBe(0);
+    runner.stop();
+  });
+
+  it("pauses and resumes without counting paused time", () => {
+    const runner = runScheduledTimer(startFocusTimer(createFocusTimer(25)));
+    vi.advanceTimersByTime(30_000);
+    const paused = pauseFocusTimer(runner.timer);
+    const secondsAtPause = paused.secondsLeft;
+
+    vi.advanceTimersByTime(10 * 60 * 1_000);
+    expect(tickFocusTimer(paused)).toEqual(paused);
+    expect(secondsAtPause).toBe(1_470);
+
+    const resumed = resumeFocusTimer(paused);
+    expect(resumed.status).toBe("running");
+    runner.stop();
+  });
+
+  it("resets a partially completed session to its full duration", () => {
+    const partial = tickFocusTimer(startFocusTimer(createFocusTimer(25)), 415);
+    const reset = resetFocusTimer(partial);
+
+    expect(reset).toEqual({ durationMinutes: 25, secondsLeft: 1_500, status: "ready" });
+  });
+});
+
+describe("Focus Universe productivity rules", () => {
+  const completedTimer = tickFocusTimer(startFocusTimer(createFocusTimer(25)), 1_500);
+  const session = { id: "session-1", completedAt: "2026-08-22T10:00:00.000Z", durationMinutes: 25 };
+
+  it("awards a completed focus session exactly once", () => {
+    const firstCompletion = completeTimerSession(initialProductivityState, completedTimer, session);
+    const secondCompletion = completeTimerSession(firstCompletion.state, completedTimer, session);
+
+    expect(firstCompletion.awarded).toBe(true);
+    expect(firstCompletion.state.xp).toBe(FOCUS_XP);
+    expect(firstCompletion.state.sessions).toHaveLength(1);
+    expect(secondCompletion.awarded).toBe(false);
+    expect(secondCompletion.state.xp).toBe(FOCUS_XP);
+    expect(secondCompletion.state.sessions).toHaveLength(1);
+  });
+
+  it("awards zero XP for incomplete or interrupted focus sessions", () => {
+    const incomplete = tickFocusTimer(startFocusTimer(createFocusTimer(25)), 1_499);
+    const paused = pauseFocusTimer(incomplete);
+    const result = completeTimerSession(initialProductivityState, paused, session);
+
+    expect(result.awarded).toBe(false);
+    expect(result.state.xp).toBe(0);
+    expect(result.state.sessions).toHaveLength(0);
+  });
+
+  it("updates levels, goal XP, and consecutive productive-day streaks", () => {
+    const withGoal = completeDailyGoal({
+      ...initialProductivityState,
+      xp: 80,
+      goals: [{ id: "goal-1", title: "Draft outline", completed: false, createdAt: "2026-08-20T09:00:00.000Z" }],
+    }, "goal-1", "2026-08-20T10:00:00.000Z");
+    const withSession = completeTimerSession(withGoal.state, completedTimer, session);
+
+    expect(withGoal.awarded).toBe(true);
+    expect(withGoal.state.xp).toBe(80 + GOAL_XP);
+    expect(withSession.state.xp).toBe(80 + GOAL_XP + FOCUS_XP);
+    expect(levelForXp(withSession.state.xp)).toBe(2);
+    expect(levelProgress(withSession.state.xp)).toMatchObject({ level: 2, current: 50, required: 300 });
+    expect(calculateStreak({
+      "2026-08-20": true,
+      "2026-08-21": true,
+      "2026-08-22": true,
+    }, new Date("2026-08-22T12:00:00.000Z"))).toEqual({ current: 3, best: 3 });
+  });
+
+  it("round-trips progress through local storage without a network dependency", () => {
+    const storage = createMemoryStorage();
+    const completed = completeTimerSession(initialProductivityState, completedTimer, session).state;
+
+    saveProductivityState(storage, completed);
+    expect(loadProductivityState(storage)).toEqual(completed);
+  });
+});
