@@ -45,6 +45,7 @@ import {
   universeUnlockEvents,
   monthlyFocusMinutes,
   type FocusTimer,
+  type UniverseUnlockHistoryRecord,
   type UniverseUnlockEvent,
 } from "@/lib/productivity";
 
@@ -74,6 +75,7 @@ type FocusUniverseState = {
   goals: DailyGoal[];
   productiveDates: Record<string, true>;
   announcedUnlocks: string[];
+  unlockHistory: UniverseUnlockHistoryRecord[];
 };
 
 type CosmicEvent = {
@@ -89,6 +91,7 @@ const initialState: FocusUniverseState = {
   goals: [],
   productiveDates: {},
   announcedUnlocks: [],
+  unlockHistory: [],
 };
 
 function dateKey(input: Date | string) {
@@ -204,6 +207,7 @@ function readState(): FocusUniverseState {
       goals: Array.isArray(parsed.goals) ? parsed.goals : [],
       productiveDates: parsed.productiveDates ?? {},
       announcedUnlocks: Array.isArray(parsed.announcedUnlocks) ? parsed.announcedUnlocks.filter((value): value is string => typeof value === "string") : [],
+      unlockHistory: Array.isArray(parsed.unlockHistory) ? parsed.unlockHistory.filter((record): record is UniverseUnlockHistoryRecord => Boolean(record) && typeof record.id === "string" && typeof record.title === "string" && typeof record.detail === "string" && typeof record.unlockedAt === "string") : [],
     };
   } catch {
     return initialState;
@@ -295,7 +299,7 @@ export default function Home() {
     setIsRunning(false);
     setSecondsLeft(duration * 60);
     setActiveSessionId(null);
-    setState((previous) => recordUniverseUnlocks(completeTimerSession(previous, completedTimer, session).state, newUnlocks));
+    setState((previous) => recordUniverseUnlocks(completeTimerSession(previous, completedTimer, session).state, newUnlocks, timestamp));
     if (newUnlocks.length) setUnlockQueue((events) => [...events, ...newUnlocks]);
     const beforeLevel = levelForXp(state.xp);
     const afterLevel = levelForXp(state.xp + FOCUS_XP);
@@ -375,7 +379,7 @@ export default function Home() {
     const beforeProgress = universeProgress(state.xp, calculateStreak(state.productiveDates).current);
     const afterProgress = universeProgress(state.xp + xpGain, calculateStreak(productiveDates).current);
     const newUnlocks = universeUnlockEvents(beforeProgress, afterProgress, state.announcedUnlocks);
-    setState((previous) => recordUniverseUnlocks(toggleDailyGoal(previous, id, now).state, newUnlocks));
+    setState((previous) => recordUniverseUnlocks(toggleDailyGoal(previous, id, now).state, newUnlocks, now));
     if (newUnlocks.length) setUnlockQueue((events) => [...events, ...newUnlocks]);
     if (xpGain) {
       const beforeLevel = levelForXp(state.xp);
@@ -580,6 +584,26 @@ export default function Home() {
             <div className="level-content"><p className="eyebrow">Observer level</p><h2>{progress.level < 3 ? "Stargazer" : progress.level < 6 ? "Orbit keeper" : "Deep space navigator"}</h2><p>Every focused block adds a little more gravity to your universe.</p></div>
             <div className="level-progress"><div><span>{progress.current} XP gathered</span><span>{progress.required} XP</span></div><div className="level-track"><span style={{ width: `${progress.percent}%` }} /></div></div>
           </article>
+        </section>
+
+        <section className="unlock-history-panel glass-panel" aria-label="Unlock History">
+          <div className="section-heading">
+            <div><p className="eyebrow">Discovery archive</p><h2>Unlock history</h2></div>
+            <div className="instrument-status"><span>ARCHIVE U·01</span><span className="metric-note">{state.unlockHistory.length} discovered</span></div>
+          </div>
+          {state.unlockHistory.length === 0 ? (
+            <div className="unlock-history-empty"><Sparkles size={20} /><p>Your discovery archive is waiting for its first signal.</p></div>
+          ) : (
+            <div className="unlock-history-list">
+              {[...state.unlockHistory].reverse().map((record) => (
+                <article className="unlock-history-row" key={record.id}>
+                  <span className={`history-glyph history-${record.id.split("-")[0]}`} aria-hidden="true" />
+                  <div><strong>{record.title}</strong><p>{record.detail}</p></div>
+                  <time dateTime={record.unlockedAt}>{new Date(record.unlockedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</time>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="goals-panel glass-panel" id="goals">

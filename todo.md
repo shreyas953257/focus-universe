@@ -32,3 +32,8 @@
 - [x] Persist which universe unlock events have already been announced without changing thresholds.
 - [x] Trigger the existing cinematic unlock animation and a restrained notification exactly once per new milestone.
 - [x] Run all automated tests, TypeScript check, and production build.
+
+## Unlock History
+- [x] Add durable first-discovery history records to the existing local persistence model.
+- [x] Add a responsive, cinematic Unlock History panel without altering existing layout behavior.
+- [x] Add deterministic tests for history recording, persistence, and duplicate prevention; run the full validation set.

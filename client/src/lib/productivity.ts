@@ -27,6 +27,7 @@ export type FocusUniverseState = {
   goals: DailyGoal[];
   productiveDates: Record<string, true>;
   announcedUnlocks: string[];
+  unlockHistory: UniverseUnlockHistoryRecord[];
 };
 
 export type FocusTimerStatus = "ready" | "running" | "paused" | "completed";
@@ -52,6 +53,10 @@ export type UniverseUnlockEvent = {
   detail: string;
 };
 
+export type UniverseUnlockHistoryRecord = UniverseUnlockEvent & {
+  unlockedAt: string;
+};
+
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export const initialProductivityState: FocusUniverseState = {
@@ -60,6 +65,7 @@ export const initialProductivityState: FocusUniverseState = {
   goals: [],
   productiveDates: {},
   announcedUnlocks: [],
+  unlockHistory: [],
 };
 
 export function dateKey(input: Date | string) {
@@ -124,9 +130,14 @@ export function universeUnlockEvents(before: UniverseProgress, after: UniversePr
   return candidates.filter((event) => !announcedUnlocks.includes(event.id));
 }
 
-export function recordUniverseUnlocks(state: FocusUniverseState, events: UniverseUnlockEvent[]): FocusUniverseState {
+export function recordUniverseUnlocks(state: FocusUniverseState, events: UniverseUnlockEvent[], unlockedAt = new Date().toISOString()): FocusUniverseState {
   if (!events.length) return state;
-  return { ...state, announcedUnlocks: Array.from(new Set([...state.announcedUnlocks, ...events.map((event) => event.id)])) };
+  const firstDiscoveries = events.filter((event) => !state.announcedUnlocks.includes(event.id) && !state.unlockHistory.some((record) => record.id === event.id));
+  return {
+    ...state,
+    announcedUnlocks: Array.from(new Set([...state.announcedUnlocks, ...events.map((event) => event.id)])),
+    unlockHistory: [...state.unlockHistory, ...firstDiscoveries.map((event) => ({ ...event, unlockedAt }))],
+  };
 }
 
 function parseDateKey(value: string) {
@@ -240,7 +251,7 @@ export function deleteDailyGoal(state: FocusUniverseState, goalId: string): Focu
 
 export function resetAllProgress(confirmReset: () => boolean): FocusUniverseState | null {
   if (!confirmReset()) return null;
-  return { xp: 0, sessions: [], goals: [], productiveDates: {}, announcedUnlocks: [] };
+  return { xp: 0, sessions: [], goals: [], productiveDates: {}, announcedUnlocks: [], unlockHistory: [] };
 }
 
 export function dailyFocusMinutes(sessions: FocusSession[], now = new Date()) {
@@ -266,6 +277,7 @@ export function loadProductivityState(storage: StorageLike): FocusUniverseState 
       goals: Array.isArray(parsed.goals) ? parsed.goals : [],
       productiveDates: parsed.productiveDates ?? {},
       announcedUnlocks: Array.isArray(parsed.announcedUnlocks) ? parsed.announcedUnlocks.filter((value): value is string => typeof value === "string") : [],
+      unlockHistory: Array.isArray(parsed.unlockHistory) ? parsed.unlockHistory.filter((record): record is UniverseUnlockHistoryRecord => Boolean(record) && typeof record.id === "string" && typeof record.title === "string" && typeof record.detail === "string" && typeof record.unlockedAt === "string") : [],
     };
   } catch {
     return initialProductivityState;

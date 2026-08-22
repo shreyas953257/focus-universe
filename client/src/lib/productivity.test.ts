@@ -279,3 +279,26 @@ describe("Focus Universe cosmic unlock progression", () => {
     expect(universeUnlockEvents(before, after, reloaded.announcedUnlocks)).toEqual([]);
   });
 });
+
+describe("Focus Universe Unlock History", () => {
+  it("records every first discovery exactly once with a deterministic date", () => {
+    const events = universeUnlockEvents(universeProgress(250, 0), universeProgress(300, 0));
+    const firstRecord = recordUniverseUnlocks(initialProductivityState, events, "2026-08-22T10:30:00.000Z");
+    const duplicateRecord = recordUniverseUnlocks(firstRecord, events, "2026-08-23T10:30:00.000Z");
+
+    expect(firstRecord.unlockHistory).toEqual([
+      { ...events[0], unlockedAt: "2026-08-22T10:30:00.000Z" },
+      { ...events[1], unlockedAt: "2026-08-22T10:30:00.000Z" },
+    ]);
+    expect(duplicateRecord.unlockHistory).toEqual(firstRecord.unlockHistory);
+  });
+
+  it("persists first-discovery history through local storage reload", () => {
+    const storage = createMemoryStorage();
+    const events = universeUnlockEvents(universeProgress(850, 0), universeProgress(900, 0));
+    const recorded = recordUniverseUnlocks(initialProductivityState, events, "2026-08-22T11:00:00.000Z");
+
+    saveProductivityState(storage, recorded);
+    expect(loadProductivityState(storage).unlockHistory).toEqual(recorded.unlockHistory);
+  });
+});
