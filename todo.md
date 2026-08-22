@@ -80,3 +80,7 @@
 - [x] Confirm the refreshed repository connection and local branch state.
 - [x] Push the current verified project to the remote `main` branch.
 - [x] Confirm remote files and the README live-demo link are present.
+
+## Vercel Live Demo link
+- [x] Replace the README Live Demo URL with the user-provided Vercel deployment.
+- [x] Run the existing test suite and production build.

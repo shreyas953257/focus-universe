@@ -6,7 +6,7 @@ Focus Universe is a cinematic productivity web app built around intentional focu
 
 ## Live Demo
 
-Explore the active Focus Universe web app: [Open the live demo](https://3000-invkiawaenicvr93vpltp-6c09d0eb.us4.manus.computer/).
+Explore the active Focus Universe web app: [Open the live demo](https://focus-universe.vercel.app/).
 
 The linked app was verified during this repository pass. Run the project locally with the instructions below to explore or modify the complete experience.
 
