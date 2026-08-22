@@ -22,7 +22,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, PointerEvent, useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "focus-universe-state-v1";
 const FOCUS_XP = 50;
@@ -200,9 +200,9 @@ function NavItem({ icon: Icon, label, active, onClick }: { icon: typeof Orbit; l
   );
 }
 
-function Metric({ icon: Icon, label, value, detail, accent }: { icon: typeof Clock3; label: string; value: string | number; detail?: string; accent?: "teal" | "gold" | "blue" }) {
+function Metric({ icon: Icon, label, value, detail, accent, energized }: { icon: typeof Clock3; label: string; value: string | number; detail?: string; accent?: "teal" | "gold" | "blue"; energized?: boolean }) {
   return (
-    <article className={`metric-card ${accent ? `metric-${accent}` : ""}`}>
+    <article className={`metric-card ${accent ? `metric-${accent}` : ""} ${energized ? "is-energized" : ""}`}>
       <div className="metric-icon"><Icon size={17} /></div>
       <div>
         <p>{label}</p>
@@ -225,6 +225,7 @@ export default function Home() {
   const [xpPulse, setXpPulse] = useState<number | null>(null);
   const [levelUp, setLevelUp] = useState<number | null>(null);
   const [cosmicEvent, setCosmicEvent] = useState<CosmicEvent | null>(null);
+  const [universeTilt, setUniverseTilt] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState("Mission control");
 
   useEffect(() => {
@@ -392,6 +393,19 @@ export default function Home() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const handleUniversePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "mouse" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const horizontal = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const vertical = (event.clientY - bounds.top) / bounds.height - 0.5;
+    setUniverseTilt({ x: Math.round(horizontal * 10), y: Math.round(vertical * 8) });
+  };
+
+  const universeStyle = {
+    "--parallax-x": `${universeTilt.x}px`,
+    "--parallax-y": `${universeTilt.y}px`,
+  } as CSSProperties;
+
   return (
     <div className="focus-universe-shell">
       <div className="deep-space" aria-hidden="true" style={{ backgroundImage: `url(${NEBULA_IMAGE})` }} />
@@ -474,7 +488,7 @@ export default function Home() {
           </article>
 
           <article className={`universe-panel ${cosmicEvent ? `is-reacting is-${cosmicEvent.kind}` : ""}`} id="universe">
-            <div className="universe-visual">
+            <div className="universe-visual" style={universeStyle} onPointerMove={handleUniversePointerMove} onPointerLeave={() => setUniverseTilt({ x: 0, y: 0 })}>
               <div className="planet-atmosphere" aria-hidden="true" style={{ backgroundImage: `linear-gradient(180deg, rgba(3, 8, 24, 0.05), rgba(3, 8, 24, 0.72)), url(${PLANET_IMAGE})` }} />
               <div className="orbit orbit-one" />
               <div className="orbit orbit-two" />
@@ -502,7 +516,7 @@ export default function Home() {
 
         <section className="metrics-strip" aria-label="Today’s productivity metrics">
           <Metric icon={Clock3} label="Today’s focus" value={formatMinutes(todayFocus)} detail={`${todaySessions.length} completed ${todaySessions.length === 1 ? "session" : "sessions"}`} accent="blue" />
-          <Metric icon={Zap} label="Total energy" value={`${state.xp} XP`} detail={`${progress.remaining} XP to next level`} accent="teal" />
+          <Metric icon={Zap} label="Total energy" value={`${state.xp} XP`} detail={`${progress.remaining} XP to next level`} accent="teal" energized={xpPulse !== null} />
           <Metric icon={Flame} label="Focus streak" value={`${streak.current} ${streak.current === 1 ? "day" : "days"}`} detail={`Personal best: ${streak.best} ${streak.best === 1 ? "day" : "days"}`} accent="gold" />
           <Metric icon={Trophy} label="Universe level" value={`0${universeLevel}`} detail={`Level ${progress.level} observer`} />
         </section>
