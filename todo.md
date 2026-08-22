@@ -84,3 +84,8 @@
 ## Vercel Live Demo link
 - [x] Replace the README Live Demo URL with the user-provided Vercel deployment.
 - [x] Run the existing test suite and production build.
+
+## Vercel production deployment fix
+- [x] Inspect the live Vercel response and current build, Vite, server, and Vercel configuration.
+- [x] Correct only the deployment configuration so Vercel serves the Vite frontend at `/`.
+- [ ] Run tests, type check, production build, and verify the live root page renders Focus Universe.
