@@ -89,3 +89,7 @@
 - [x] Inspect the live Vercel response and current build, Vite, server, and Vercel configuration.
 - [x] Correct only the deployment configuration so Vercel serves the Vite frontend at `/`.
 - [x] Run tests, type check, production build, and verify the live root page renders Focus Universe.
+
+## Prominent README Live Demo
+- [x] Add the requested prominent Live Demo section immediately after the project description.
+- [ ] Synchronize the README-only update to the GitHub `main` branch.

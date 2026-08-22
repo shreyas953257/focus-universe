@@ -4,7 +4,7 @@
 
 Focus Universe is a cinematic productivity web app built around intentional focus sessions, daily goals, and visible long-term progression. It is designed to work entirely in the browser: users can track work, earn XP, grow a universe, review insights, and retain ownership of their data without creating an account.
 
-## Live Demo
+## 🚀 Live Demo
 
 Explore the active Focus Universe web app: [Open the live demo](https://focus-universe.vercel.app/).
 
