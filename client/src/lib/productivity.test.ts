@@ -21,7 +21,9 @@ import {
   startFocusTimer,
   tickFocusTimer,
   toggleDailyGoal,
+  recordUniverseUnlocks,
   universeProgress,
+  universeUnlockEvents,
   monthlyFocusMinutes,
   type FocusTimer,
   type StorageLike,
@@ -260,5 +262,20 @@ describe("Focus Universe cosmic unlock progression", () => {
 
     expect(afterProgress).toEqual(beforeProgress);
     expect(afterProgress).toMatchObject({ stars: 30, planets: 4, moons: 1, cometUnlocked: true });
+  });
+
+  it("announces each newly earned milestone once and suppresses it after reload", () => {
+    const storage = createMemoryStorage();
+    const before = universeProgress(250, 0);
+    const after = universeProgress(300, 0);
+    const events = universeUnlockEvents(before, after);
+    const announced = recordUniverseUnlocks({ ...initialProductivityState, xp: 300 }, events);
+
+    expect(events.map((event) => event.id)).toEqual(["star-14", "planet-1"]);
+    expect(universeUnlockEvents(before, after, announced.announcedUnlocks)).toEqual([]);
+
+    saveProductivityState(storage, announced);
+    const reloaded = loadProductivityState(storage);
+    expect(universeUnlockEvents(before, after, reloaded.announcedUnlocks)).toEqual([]);
   });
 });

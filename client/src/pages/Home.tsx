@@ -38,11 +38,14 @@ import {
   loadProductivityState,
   saveProductivityState,
   resetAllProgress,
+  recordUniverseUnlocks,
   tickFocusTimer,
   toggleDailyGoal,
   universeProgress,
+  universeUnlockEvents,
   monthlyFocusMinutes,
   type FocusTimer,
+  type UniverseUnlockEvent,
 } from "@/lib/productivity";
 
 const NEBULA_IMAGE = "/manus-storage/focus-universe-nebula-hero_0d4c7968.jpg";
@@ -70,6 +73,7 @@ type FocusUniverseState = {
   sessions: FocusSession[];
   goals: DailyGoal[];
   productiveDates: Record<string, true>;
+  announcedUnlocks: string[];
 };
 
 type CosmicEvent = {
@@ -84,6 +88,7 @@ const initialState: FocusUniverseState = {
   sessions: [],
   goals: [],
   productiveDates: {},
+  announcedUnlocks: [],
 };
 
 function dateKey(input: Date | string) {
@@ -198,6 +203,7 @@ function readState(): FocusUniverseState {
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       goals: Array.isArray(parsed.goals) ? parsed.goals : [],
       productiveDates: parsed.productiveDates ?? {},
+      announcedUnlocks: Array.isArray(parsed.announcedUnlocks) ? parsed.announcedUnlocks.filter((value): value is string => typeof value === "string") : [],
     };
   } catch {
     return initialState;
@@ -238,6 +244,7 @@ export default function Home() {
   const [xpPulse, setXpPulse] = useState<number | null>(null);
   const [levelUp, setLevelUp] = useState<number | null>(null);
   const [cosmicEvent, setCosmicEvent] = useState<CosmicEvent | null>(null);
+  const [unlockQueue, setUnlockQueue] = useState<UniverseUnlockEvent[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [universeTilt, setUniverseTilt] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState("Mission control");
@@ -255,8 +262,22 @@ export default function Home() {
   const triggerCosmicEvent = (kind: CosmicEvent["kind"], title: string, detail: string) => {
     const id = Date.now();
     setCosmicEvent({ id, kind, title, detail });
-    window.setTimeout(() => setCosmicEvent((event) => event?.id === id ? null : event), kind === "level" ? 3600 : 2600);
+    if (kind !== "unlock") window.setTimeout(() => setCosmicEvent((event) => event?.id === id ? null : event), kind === "level" ? 3600 : 2600);
   };
+
+  useEffect(() => {
+    if (cosmicEvent || !unlockQueue.length) return;
+    const [nextEvent, ...remainingEvents] = unlockQueue;
+    setUnlockQueue(remainingEvents);
+    triggerCosmicEvent("unlock", nextEvent.title, nextEvent.detail);
+  }, [cosmicEvent, unlockQueue]);
+
+  useEffect(() => {
+    if (cosmicEvent?.kind !== "unlock") return undefined;
+    const id = cosmicEvent.id;
+    const timeout = window.setTimeout(() => setCosmicEvent((event) => event?.id === id ? null : event), 2600);
+    return () => window.clearTimeout(timeout);
+  }, [cosmicEvent]);
 
   const completeFocus = () => {
     const timestamp = new Date().toISOString();
@@ -267,14 +288,15 @@ export default function Home() {
       setIsRunning(false);
       return;
     }
-    const beforeCosmos = cosmicSnapshot(state.xp, calculateStreak(state.productiveDates).current);
     const productiveDates = completion.state.productiveDates;
-    const afterCosmos = cosmicSnapshot(state.xp + FOCUS_XP, calculateStreak(productiveDates).current);
-    const newObject = cosmicUnlock(beforeCosmos, afterCosmos);
+    const beforeProgress = universeProgress(state.xp, calculateStreak(state.productiveDates).current);
+    const afterProgress = universeProgress(state.xp + FOCUS_XP, calculateStreak(productiveDates).current);
+    const newUnlocks = universeUnlockEvents(beforeProgress, afterProgress, state.announcedUnlocks);
     setIsRunning(false);
     setSecondsLeft(duration * 60);
     setActiveSessionId(null);
-    setState((previous) => completeTimerSession(previous, completedTimer, session).state);
+    setState((previous) => recordUniverseUnlocks(completeTimerSession(previous, completedTimer, session).state, newUnlocks));
+    if (newUnlocks.length) setUnlockQueue((events) => [...events, ...newUnlocks]);
     const beforeLevel = levelForXp(state.xp);
     const afterLevel = levelForXp(state.xp + FOCUS_XP);
     setXpPulse(FOCUS_XP);
@@ -284,9 +306,8 @@ export default function Home() {
       setNotice(`Level ${afterLevel} reached. Your universe has expanded.`);
       window.setTimeout(() => setLevelUp(null), 3800);
       triggerCosmicEvent("level", `Observer level ${afterLevel}`, "A wider orbit has opened in your universe.");
-    } else if (newObject) {
-      setNotice(newObject.detail);
-      triggerCosmicEvent("unlock", newObject.title, newObject.detail);
+    } else if (newUnlocks.length) {
+      setNotice(newUnlocks[0].detail);
     } else {
       setNotice(`Session complete. +${FOCUS_XP} XP recorded in your constellation.`);
       triggerCosmicEvent("session", "Orbit complete", "The session has been recorded in your constellation.");
@@ -350,11 +371,12 @@ export default function Home() {
     const now = new Date().toISOString();
     const transition = toggleDailyGoal(state, id, now);
     const xpGain = transition.awarded ? GOAL_XP : 0;
-    const beforeCosmos = cosmicSnapshot(state.xp, calculateStreak(state.productiveDates).current);
     const productiveDates = transition.state.productiveDates;
-    const afterCosmos = cosmicSnapshot(state.xp + xpGain, calculateStreak(productiveDates).current);
-    const newObject = cosmicUnlock(beforeCosmos, afterCosmos);
-    setState((previous) => toggleDailyGoal(previous, id, now).state);
+    const beforeProgress = universeProgress(state.xp, calculateStreak(state.productiveDates).current);
+    const afterProgress = universeProgress(state.xp + xpGain, calculateStreak(productiveDates).current);
+    const newUnlocks = universeUnlockEvents(beforeProgress, afterProgress, state.announcedUnlocks);
+    setState((previous) => recordUniverseUnlocks(toggleDailyGoal(previous, id, now).state, newUnlocks));
+    if (newUnlocks.length) setUnlockQueue((events) => [...events, ...newUnlocks]);
     if (xpGain) {
       const beforeLevel = levelForXp(state.xp);
       const afterLevel = levelForXp(state.xp + xpGain);
@@ -365,9 +387,8 @@ export default function Home() {
         setNotice(`Level ${afterLevel} reached. A new orbit has opened.`);
         window.setTimeout(() => setLevelUp(null), 3800);
         triggerCosmicEvent("level", `Observer level ${afterLevel}`, "A wider orbit has opened in your universe.");
-      } else if (newObject) {
-        setNotice(newObject.detail);
-        triggerCosmicEvent("unlock", newObject.title, newObject.detail);
+      } else if (newUnlocks.length) {
+        setNotice(newUnlocks[0].detail);
       } else {
         setNotice(`Goal complete. +${GOAL_XP} XP added to your record.`);
         triggerCosmicEvent("xp", "Energy gathered", `+${GOAL_XP} XP has been added to your record.`);

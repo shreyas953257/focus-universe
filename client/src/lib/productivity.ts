@@ -26,6 +26,7 @@ export type FocusUniverseState = {
   sessions: FocusSession[];
   goals: DailyGoal[];
   productiveDates: Record<string, true>;
+  announcedUnlocks: string[];
 };
 
 export type FocusTimerStatus = "ready" | "running" | "paused" | "completed";
@@ -45,6 +46,12 @@ export type UniverseProgress = {
   cometUnlocked: boolean;
 };
 
+export type UniverseUnlockEvent = {
+  id: string;
+  title: string;
+  detail: string;
+};
+
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export const initialProductivityState: FocusUniverseState = {
@@ -52,6 +59,7 @@ export const initialProductivityState: FocusUniverseState = {
   sessions: [],
   goals: [],
   productiveDates: {},
+  announcedUnlocks: [],
 };
 
 export function dateKey(input: Date | string) {
@@ -94,6 +102,31 @@ export function universeProgress(xp: number, currentStreak: number): UniversePro
     moons: Math.max(0, Math.floor((level - 2) / 2)),
     cometUnlocked: currentStreak >= 3,
   };
+}
+
+export function universeUnlockEvents(before: UniverseProgress, after: UniverseProgress, announcedUnlocks: string[] = []): UniverseUnlockEvent[] {
+  const candidates: UniverseUnlockEvent[] = [];
+  for (let count = before.stars + 1; count <= after.stars; count += 1) {
+    candidates.push({ id: `star-${count}`, title: "Star ignited", detail: `Star ${count} has joined your constellation.` });
+  }
+  for (let count = before.planets + 1; count <= after.planets; count += 1) {
+    candidates.push({ id: `planet-${count}`, title: "Planet detected", detail: `Planet ${count} has settled into your orbit.` });
+  }
+  for (let count = before.moons + 1; count <= after.moons; count += 1) {
+    candidates.push({ id: `moon-${count}`, title: "Moon detected", detail: `Moon ${count} now circles your sector.` });
+  }
+  if (after.cometUnlocked && !before.cometUnlocked) {
+    candidates.push({ id: "comet", title: "Comet detected", detail: "Your three-day focus streak has lit the outer sky." });
+  }
+  for (let level = before.universeLevel + 1; level <= after.universeLevel; level += 1) {
+    candidates.push({ id: `sector-${level}`, title: `Sector 0${level} opened`, detail: "A wider observatory orbit is now within reach." });
+  }
+  return candidates.filter((event) => !announcedUnlocks.includes(event.id));
+}
+
+export function recordUniverseUnlocks(state: FocusUniverseState, events: UniverseUnlockEvent[]): FocusUniverseState {
+  if (!events.length) return state;
+  return { ...state, announcedUnlocks: Array.from(new Set([...state.announcedUnlocks, ...events.map((event) => event.id)])) };
 }
 
 function parseDateKey(value: string) {
@@ -207,7 +240,7 @@ export function deleteDailyGoal(state: FocusUniverseState, goalId: string): Focu
 
 export function resetAllProgress(confirmReset: () => boolean): FocusUniverseState | null {
   if (!confirmReset()) return null;
-  return { xp: 0, sessions: [], goals: [], productiveDates: {} };
+  return { xp: 0, sessions: [], goals: [], productiveDates: {}, announcedUnlocks: [] };
 }
 
 export function dailyFocusMinutes(sessions: FocusSession[], now = new Date()) {
@@ -232,6 +265,7 @@ export function loadProductivityState(storage: StorageLike): FocusUniverseState 
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       goals: Array.isArray(parsed.goals) ? parsed.goals : [],
       productiveDates: parsed.productiveDates ?? {},
+      announcedUnlocks: Array.isArray(parsed.announcedUnlocks) ? parsed.announcedUnlocks.filter((value): value is string => typeof value === "string") : [],
     };
   } catch {
     return initialProductivityState;

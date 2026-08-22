@@ -27,3 +27,8 @@
 - [x] Extract the existing star, planet, moon, comet, and universe-level thresholds into testable local logic.
 - [x] Add deterministic Vitest coverage for threshold boundaries, non-premature unlocks, and reload persistence.
 - [x] Run the full test suite, TypeScript check, and production build.
+
+## First-time unlock feedback
+- [x] Persist which universe unlock events have already been announced without changing thresholds.
+- [x] Trigger the existing cinematic unlock animation and a restrained notification exactly once per new milestone.
+- [x] Run all automated tests, TypeScript check, and production build.
