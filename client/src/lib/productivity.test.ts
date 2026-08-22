@@ -21,6 +21,7 @@ import {
   startFocusTimer,
   tickFocusTimer,
   toggleDailyGoal,
+  universeProgress,
   monthlyFocusMinutes,
   type FocusTimer,
   type StorageLike,
@@ -207,5 +208,57 @@ describe("Focus Universe goal idempotency and analytics", () => {
 
     expect(dailyFocusMinutes(sessions)).toBe(25);
     expect(monthlyFocusMinutes(sessions)).toBe(45);
+  });
+});
+
+describe("Focus Universe cosmic unlock progression", () => {
+  it("unlocks stars exactly at each 55 XP boundary and never prematurely", () => {
+    expect(universeProgress(54, 0).stars).toBe(9);
+    expect(universeProgress(55, 0).stars).toBe(10);
+    expect(universeProgress(2_310, 0).stars).toBe(42);
+    expect(universeProgress(2_365, 0).stars).toBe(42);
+  });
+
+  it("unlocks planets exactly at 300 XP intervals and respects the four-planet cap", () => {
+    expect(universeProgress(299, 0).planets).toBe(0);
+    expect(universeProgress(300, 0).planets).toBe(1);
+    expect(universeProgress(1_199, 0).planets).toBe(3);
+    expect(universeProgress(1_200, 0).planets).toBe(4);
+    expect(universeProgress(9_999, 0).planets).toBe(4);
+  });
+
+  it("unlocks moons only at the intended level thresholds", () => {
+    expect(universeProgress(899, 0).moons).toBe(0);
+    expect(universeProgress(900, 0).moons).toBe(1);
+    expect(universeProgress(2_499, 0).moons).toBe(1);
+    expect(universeProgress(2_500, 0).moons).toBe(2);
+  });
+
+  it("unlocks the streak comet exactly on the third consecutive productive day", () => {
+    expect(universeProgress(0, 2).cometUnlocked).toBe(false);
+    expect(universeProgress(0, 3).cometUnlocked).toBe(true);
+  });
+
+  it("calculates universe levels at the same level milestones used by the dashboard", () => {
+    expect(universeProgress(0, 0)).toMatchObject({ level: 1, universeLevel: 1 });
+    expect(universeProgress(100, 0)).toMatchObject({ level: 2, universeLevel: 1 });
+    expect(universeProgress(400, 0)).toMatchObject({ level: 3, universeLevel: 2 });
+  });
+
+  it("preserves already-unlocked cosmic objects after a local storage reload", () => {
+    const storage = createMemoryStorage();
+    const beforeReload = {
+      ...initialProductivityState,
+      xp: 1_200,
+      productiveDates: { "2026-08-20": true as const, "2026-08-21": true as const, "2026-08-22": true as const },
+    };
+    const beforeProgress = universeProgress(beforeReload.xp, calculateStreak(beforeReload.productiveDates, new Date("2026-08-22T12:00:00.000Z")).current);
+
+    saveProductivityState(storage, beforeReload);
+    const afterReload = loadProductivityState(storage);
+    const afterProgress = universeProgress(afterReload.xp, calculateStreak(afterReload.productiveDates, new Date("2026-08-22T12:00:00.000Z")).current);
+
+    expect(afterProgress).toEqual(beforeProgress);
+    expect(afterProgress).toMatchObject({ stars: 30, planets: 4, moons: 1, cometUnlocked: true });
   });
 });

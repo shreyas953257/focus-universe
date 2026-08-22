@@ -40,6 +40,7 @@ import {
   resetAllProgress,
   tickFocusTimer,
   toggleDailyGoal,
+  universeProgress,
   monthlyFocusMinutes,
   type FocusTimer,
 } from "@/lib/productivity";
@@ -127,13 +128,8 @@ function levelProgress(xp: number) {
 }
 
 function cosmicSnapshot(xp: number, streak: number) {
-  const level = levelForXp(xp);
-  return {
-    stars: Math.min(42, 9 + Math.floor(xp / 55)),
-    planets: Math.min(4, Math.floor(xp / 300)),
-    moons: Math.max(0, Math.floor((level - 2) / 2)),
-    comet: streak >= 3,
-  };
+  const progress = universeProgress(xp, streak);
+  return { stars: progress.stars, planets: progress.planets, moons: progress.moons, comet: progress.cometUnlocked };
 }
 
 function cosmicUnlock(before: ReturnType<typeof cosmicSnapshot>, after: ReturnType<typeof cosmicSnapshot>) {
@@ -319,11 +315,12 @@ export default function Home() {
   }), [state.sessions]);
   const weeklyFocus = weeklyData.reduce((total, day) => total + day.minutes, 0);
   const monthlyFocus = monthlyFocusMinutes(state.sessions);
-  const universeLevel = Math.max(1, Math.ceil(progress.level / 2));
-  const starCount = Math.min(42, 9 + Math.floor(state.xp / 55));
-  const planetCount = Math.min(4, Math.floor(state.xp / 300));
-  const moonCount = Math.max(0, Math.floor((progress.level - 2) / 2));
-  const showComet = streak.current >= 3;
+  const universe = useMemo(() => universeProgress(state.xp, streak.current), [state.xp, streak.current]);
+  const universeLevel = universe.universeLevel;
+  const starCount = universe.stars;
+  const planetCount = universe.planets;
+  const moonCount = universe.moons;
+  const showComet = universe.cometUnlocked;
 
   const timerProgress = Math.max(0, Math.min(1, 1 - secondsLeft / (duration * 60)));
   const timerDash = 2 * Math.PI * 118;

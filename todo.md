@@ -22,3 +22,8 @@
 - [x] Add deterministic analytics helpers while preserving the current dashboard calculations.
 - [x] Add Vitest coverage for goal-completion XP idempotency and daily/monthly analytics.
 - [x] Run the complete test suite, TypeScript check, and production build.
+
+## Universe progression tests
+- [x] Extract the existing star, planet, moon, comet, and universe-level thresholds into testable local logic.
+- [x] Add deterministic Vitest coverage for threshold boundaries, non-premature unlocks, and reload persistence.
+- [x] Run the full test suite, TypeScript check, and production build.

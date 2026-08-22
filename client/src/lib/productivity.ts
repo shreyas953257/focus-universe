@@ -36,6 +36,15 @@ export type FocusTimer = {
   status: FocusTimerStatus;
 };
 
+export type UniverseProgress = {
+  level: number;
+  universeLevel: number;
+  stars: number;
+  planets: number;
+  moons: number;
+  cometUnlocked: boolean;
+};
+
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export const initialProductivityState: FocusUniverseState = {
@@ -72,6 +81,18 @@ export function levelProgress(xp: number) {
     required,
     remaining: nextFloor - xp,
     percent: Math.min(100, Math.max(0, (current / required) * 100)),
+  };
+}
+
+export function universeProgress(xp: number, currentStreak: number): UniverseProgress {
+  const level = levelForXp(xp);
+  return {
+    level,
+    universeLevel: Math.max(1, Math.ceil(level / 2)),
+    stars: Math.min(42, 9 + Math.floor(xp / 55)),
+    planets: Math.min(4, Math.floor(xp / 300)),
+    moons: Math.max(0, Math.floor((level - 2) / 2)),
+    cometUnlocked: currentStreak >= 3,
   };
 }
 
