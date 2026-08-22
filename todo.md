@@ -65,3 +65,8 @@
 - [x] Finalize README, add CONTRIBUTING.md, and configure repository presentation metadata without misleading claims.
 - [x] Capture and organize real dashboard and mobile screenshots under docs/screenshots/.
 - [x] Run tests, coverage, type check, build, YAML validation, README command checks, and final quality review.
+
+## Final GitHub portfolio setup
+- [x] Inspect the active live-app URL and GitHub repository context for reliable links and permitted metadata changes.
+- [x] Add only verified live-demo and CI links to README, then apply appropriate repository topics if permitted. No GitHub remote or repository URL is configured, so topics and a CI badge were intentionally not added.
+- [x] Verify README accuracy and run npm test, coverage, type check, and production build.

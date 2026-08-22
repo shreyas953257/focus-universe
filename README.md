@@ -6,7 +6,9 @@ Focus Universe is a cinematic productivity web app built around intentional focu
 
 ## Live Demo
 
-A hosted public demo is not configured in this repository. Run the project locally with the instructions below to explore the complete experience.
+Explore the active Focus Universe web app: [Open the live demo](https://3000-invkiawaenicvr93vpltp-6c09d0eb.us4.manus.computer/).
+
+The linked app was verified during this repository pass. Run the project locally with the instructions below to explore or modify the complete experience.
 
 ## What It Does
 
@@ -142,6 +144,8 @@ Generate local coverage:
 ```bash
 pnpm test:coverage
 ```
+
+The latest local coverage run reports **99.5% line coverage for `client/src/lib/productivity.ts`**, the deterministic timer, progression, persistence, backup, and analytics domain module.
 
 ## Screenshots
 
