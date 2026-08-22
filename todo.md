@@ -47,3 +47,8 @@
 - [x] Add deterministic week-by-week analytics and display week-by-week focus totals.
 - [x] Expand tests for all added behaviors and configure a local coverage command.
 - [x] Run the full test suite, coverage report, TypeScript check, production build, and responsive/offline verification.
+
+## Visible Data & Settings
+- [x] Inspect the existing lower-dashboard controls and local backup/sound handlers.
+- [x] Add a compact responsive Data & Settings section after Daily Goals using the existing local-only behavior.
+- [x] Run the full test suite, coverage report, TypeScript check, and production build.

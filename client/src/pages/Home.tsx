@@ -673,12 +673,6 @@ export default function Home() {
             </div>
             <label className="history-sort"><span>Sort</span><select value={historySort} onChange={(event) => setHistorySort(event.target.value as UnlockHistorySort)} aria-label="Sort unlock history"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="type">Object type</option></select></label>
           </div>
-          <div className="local-data-tools" aria-label="Local data tools">
-            <button type="button" onClick={exportProgress}>Export backup</button>
-            <button type="button" onClick={() => importInputRef.current?.click()}>Import backup</button>
-            <input ref={importInputRef} type="file" accept="application/json" className="visually-hidden" aria-label="Import Focus Universe backup" onChange={(event) => { void importProgress(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-            <button type="button" className={state.soundEnabled ? "sound-toggle is-on" : "sound-toggle"} aria-pressed={state.soundEnabled} onClick={() => { const next = !state.soundEnabled; setState((previous) => ({ ...previous, soundEnabled: next })); setNotice(next ? "Local milestone sounds enabled." : "Local milestone sounds muted."); if (next) { try { const context = audioContextRef.current ?? new window.AudioContext(); audioContextRef.current = context; void context.resume(); } catch { /* Optional browser audio may remain unavailable. */ } } }}>{state.soundEnabled ? "Sound on" : "Sound off"}</button>
-          </div>
           {historyRecords.length === 0 ? (
             <div className="unlock-history-empty"><Sparkles size={20} /><p>Your discovery archive is waiting for its first signal.</p></div>
           ) : (
@@ -714,6 +708,27 @@ export default function Home() {
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="data-settings-panel glass-panel" aria-label="Data and Settings">
+          <div className="section-heading">
+            <div><p className="eyebrow">Local observatory</p><h2>Data &amp; settings</h2></div>
+            <div className="instrument-status"><span>VAULT D·01</span><span className="metric-note">device-only</span></div>
+          </div>
+          <div className="settings-grid">
+            <div className="settings-card">
+              <div className="settings-card-heading"><span className="settings-orbit" aria-hidden="true" /><div><strong>Backup vault</strong><p>Export every local session, goal, level, and discovery as validated JSON.</p></div></div>
+              <div className="settings-actions">
+                <button type="button" onClick={exportProgress}>Export backup</button>
+                <button type="button" onClick={() => importInputRef.current?.click()}>Import backup</button>
+                <input ref={importInputRef} type="file" accept="application/json" className="visually-hidden" aria-label="Import Focus Universe backup" onChange={(event) => { void importProgress(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+              </div>
+            </div>
+            <div className="settings-card">
+              <div className="settings-card-heading"><span className="settings-signal" aria-hidden="true" /><div><strong>Sound effects</strong><p>Optional local tones for milestones. Off by default and saved on this device.</p></div></div>
+              <button type="button" role="switch" aria-checked={state.soundEnabled} className={state.soundEnabled ? "sound-toggle is-on" : "sound-toggle"} onClick={() => { const next = !state.soundEnabled; setState((previous) => ({ ...previous, soundEnabled: next })); setNotice(next ? "Local milestone sounds enabled." : "Local milestone sounds muted."); if (next) { try { const context = audioContextRef.current ?? new window.AudioContext(); audioContextRef.current = context; void context.resume(); } catch { /* Optional browser audio may remain unavailable. */ } } }}><span>{state.soundEnabled ? "ON" : "OFF"}</span><i aria-hidden="true" /></button>
+            </div>
           </div>
         </section>
 
