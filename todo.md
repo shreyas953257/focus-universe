@@ -52,3 +52,8 @@
 - [x] Inspect the existing lower-dashboard controls and local backup/sound handlers.
 - [x] Add a compact responsive Data & Settings section after Daily Goals using the existing local-only behavior.
 - [x] Run the full test suite, coverage report, TypeScript check, and production build.
+
+## Portfolio GitHub release
+- [x] Inspect project documentation and metadata for portfolio-readiness and project-controlled branding.
+- [x] Write a professional README with product, progression, privacy, testing, structure, and local-run guidance.
+- [x] Run npm test, TypeScript check, and production build without changing the application.
