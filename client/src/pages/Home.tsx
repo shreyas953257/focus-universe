@@ -30,10 +30,13 @@ import {
   calculateStreak as calculateProductivityStreak,
   completeTimerSession,
   createFocusTimer,
+  deleteDailyGoal,
+  editDailyGoal,
   levelForXp as productivityLevelForXp,
   levelProgress as productivityLevelProgress,
   loadProductivityState,
   saveProductivityState,
+  resetAllProgress,
   tickFocusTimer,
   type FocusTimer,
 } from "@/lib/productivity";
@@ -383,20 +386,21 @@ export default function Home() {
   const saveGoalEdit = (id: string) => {
     const title = editingText.trim();
     if (!title) return;
-    setState((previous) => ({ ...previous, goals: previous.goals.map((goal) => goal.id === id ? { ...goal, title } : goal) }));
+    setState((previous) => editDailyGoal(previous, id, title));
     setEditingGoal(null);
     setNotice("Goal coordinates updated.");
   };
 
   const deleteGoal = (id: string) => {
-    setState((previous) => ({ ...previous, goals: previous.goals.filter((goal) => goal.id !== id) }));
+    setState((previous) => deleteDailyGoal(previous, id));
     if (editingGoal === id) setEditingGoal(null);
     setNotice("Goal removed from today’s flight plan.");
   };
 
   const resetAll = () => {
-    if (!window.confirm("Reset all Focus Universe progress? This removes saved sessions, goals, XP, and streak history from this browser.")) return;
-    setState(initialState);
+    const resetState = resetAllProgress(() => window.confirm("Reset all Focus Universe progress? This removes saved sessions, goals, XP, and streak history from this browser."));
+    if (!resetState) return;
+    setState(resetState);
     setIsRunning(false);
     setDuration(25);
     setSecondsLeft(25 * 60);

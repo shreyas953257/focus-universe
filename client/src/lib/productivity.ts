@@ -164,6 +164,22 @@ export function completeDailyGoal(state: FocusUniverseState, goalId: string, com
   };
 }
 
+export function editDailyGoal(state: FocusUniverseState, goalId: string, title: string): FocusUniverseState {
+  const nextTitle = title.trim();
+  if (!nextTitle || !state.goals.some((goal) => goal.id === goalId)) return state;
+  return { ...state, goals: state.goals.map((goal) => goal.id === goalId ? { ...goal, title: nextTitle } : goal) };
+}
+
+export function deleteDailyGoal(state: FocusUniverseState, goalId: string): FocusUniverseState {
+  if (!state.goals.some((goal) => goal.id === goalId)) return state;
+  return { ...state, goals: state.goals.filter((goal) => goal.id !== goalId) };
+}
+
+export function resetAllProgress(confirmReset: () => boolean): FocusUniverseState | null {
+  if (!confirmReset()) return null;
+  return { xp: 0, sessions: [], goals: [], productiveDates: {} };
+}
+
 export function loadProductivityState(storage: StorageLike): FocusUniverseState {
   try {
     const storedValue = storage.getItem(STORAGE_KEY);

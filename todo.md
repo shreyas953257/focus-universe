@@ -12,3 +12,8 @@
 - [x] Extract pure timer and productivity state logic while preserving current application behavior.
 - [x] Add fake-timer tests for timer controls, completion, XP, levels, streaks, and persistence.
 - [x] Add the npm test command and run the full automated suite plus build checks.
+
+## Goal and reset tests
+- [x] Add deterministic goal editing, deletion, and reset-confirmation helpers to the local productivity domain.
+- [x] Add Vitest coverage for goal editing, deletion, and accepted or declined reset confirmation.
+- [x] Run the complete suite, type check, and production build.

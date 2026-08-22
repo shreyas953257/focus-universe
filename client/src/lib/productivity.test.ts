@@ -6,12 +6,15 @@ import {
   completeDailyGoal,
   completeTimerSession,
   createFocusTimer,
+  deleteDailyGoal,
+  editDailyGoal,
   initialProductivityState,
   levelForXp,
   levelProgress,
   loadProductivityState,
   pauseFocusTimer,
   resetFocusTimer,
+  resetAllProgress,
   resumeFocusTimer,
   saveProductivityState,
   startFocusTimer,
@@ -127,5 +130,44 @@ describe("Focus Universe productivity rules", () => {
 
     saveProductivityState(storage, completed);
     expect(loadProductivityState(storage)).toEqual(completed);
+  });
+});
+
+describe("Focus Universe goal and reset management", () => {
+  const stateWithGoals = {
+    ...initialProductivityState,
+    xp: 70,
+    goals: [
+      { id: "goal-1", title: "Outline the chapter", completed: false, createdAt: "2026-08-22T09:00:00.000Z" },
+      { id: "goal-2", title: "Review notes", completed: true, createdAt: "2026-08-22T09:15:00.000Z", completedAt: "2026-08-22T09:30:00.000Z", xpAwarded: true },
+    ],
+    productiveDates: { "2026-08-22": true as const },
+  };
+
+  it("edits only the requested goal and ignores a blank edit", () => {
+    const edited = editDailyGoal(stateWithGoals, "goal-1", "  Draft the opening section  ");
+
+    expect(edited.goals[0].title).toBe("Draft the opening section");
+    expect(edited.goals[1]).toEqual(stateWithGoals.goals[1]);
+    expect(editDailyGoal(edited, "goal-1", "   ")).toBe(edited);
+  });
+
+  it("deletes only the selected goal without altering saved productivity", () => {
+    const deleted = deleteDailyGoal(stateWithGoals, "goal-1");
+
+    expect(deleted.goals).toEqual([stateWithGoals.goals[1]]);
+    expect(deleted.xp).toBe(70);
+    expect(deleted.productiveDates).toEqual({ "2026-08-22": true });
+    expect(deleteDailyGoal(deleted, "missing-goal")).toBe(deleted);
+  });
+
+  it("resets all progress only after confirmation", () => {
+    const decline = vi.fn(() => false);
+    const accept = vi.fn(() => true);
+
+    expect(resetAllProgress(decline)).toBeNull();
+    expect(decline).toHaveBeenCalledTimes(1);
+    expect(resetAllProgress(accept)).toEqual(initialProductivityState);
+    expect(accept).toHaveBeenCalledTimes(1);
   });
 });
