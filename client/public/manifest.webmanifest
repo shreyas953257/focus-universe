@@ -1,0 +1,17 @@
+{
+  "name": "Focus Universe",
+  "short_name": "Focus Universe",
+  "description": "A local-first productivity observatory that grows with every focus session.",
+  "display": "standalone",
+  "start_url": "/",
+  "background_color": "#050a19",
+  "theme_color": "#050a19",
+  "icons": [
+    {
+      "src": "/manus-storage/focus-universe-mark_cdda4958.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

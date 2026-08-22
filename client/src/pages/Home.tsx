@@ -1,25 +1,515 @@
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
-
 /**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Best Practices, Design Guide and Common Pitfalls
+ * Observatory Nightfall UI: cinematic astronomical command deck with instrument-grade clarity.
+ * Ion Teal is reserved for constructive progress; motion is deliberate and low-amplitude.
  */
+import {
+  Check,
+  ChevronRight,
+  CircleHelp,
+  Clock3,
+  Edit3,
+  Flame,
+  Goal,
+  MoreHorizontal,
+  Orbit,
+  Pause,
+  Play,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+  Trophy,
+  X,
+  Zap,
+} from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+
+const STORAGE_KEY = "focus-universe-state-v1";
+const FOCUS_XP = 50;
+const GOAL_XP = 20;
+const NEBULA_IMAGE = "/manus-storage/focus-universe-nebula-hero_0d4c7968.jpg";
+const PLANET_IMAGE = "/manus-storage/focus-universe-orbital-planet_a011269a.jpg";
+const COMET_IMAGE = "/manus-storage/focus-universe-comet_a0367955.jpg";
+const LOGO_IMAGE = "/manus-storage/focus-universe-mark_cdda4958.png";
+
+type FocusSession = {
+  id: string;
+  completedAt: string;
+  durationMinutes: number;
+};
+
+type DailyGoal = {
+  id: string;
+  title: string;
+  completed: boolean;
+  createdAt: string;
+  completedAt?: string;
+  xpAwarded?: boolean;
+};
+
+type FocusUniverseState = {
+  xp: number;
+  sessions: FocusSession[];
+  goals: DailyGoal[];
+  productiveDates: Record<string, true>;
+};
+
+const initialState: FocusUniverseState = {
+  xp: 0,
+  sessions: [],
+  goals: [],
+  productiveDates: {},
+};
+
+function dateKey(input: Date | string) {
+  const date = new Date(input);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function dayOffset(days: number) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - days);
+  return date;
+}
+
+function parseKey(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
+function levelBase(level: number) {
+  return Math.pow(level - 1, 2) * 100;
+}
+
+function levelForXp(xp: number) {
+  return Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1;
+}
+
+function levelProgress(xp: number) {
+  const level = levelForXp(xp);
+  const currentFloor = levelBase(level);
+  const nextFloor = levelBase(level + 1);
+  const inLevel = xp - currentFloor;
+  return {
+    level,
+    current: inLevel,
+    required: nextFloor - currentFloor,
+    remaining: nextFloor - xp,
+    percent: Math.min(100, Math.max(0, (inLevel / (nextFloor - currentFloor)) * 100)),
+  };
+}
+
+function calculateStreak(productiveDates: Record<string, true>) {
+  const keys = Object.keys(productiveDates).sort();
+  if (!keys.length) return { current: 0, best: 0 };
+
+  let current = 0;
+  let cursor = new Date();
+  cursor.setHours(12, 0, 0, 0);
+  if (!productiveDates[dateKey(cursor)]) cursor.setDate(cursor.getDate() - 1);
+  while (productiveDates[dateKey(cursor)]) {
+    current += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  let best = 1;
+  let running = 1;
+  for (let index = 1; index < keys.length; index += 1) {
+    const previous = parseKey(keys[index - 1]);
+    const next = parseKey(keys[index]);
+    const diff = Math.round((next.getTime() - previous.getTime()) / 86_400_000);
+    running = diff === 1 ? running + 1 : 1;
+    best = Math.max(best, running);
+  }
+  return { current, best };
+}
+
+function formatMinutes(value: number) {
+  if (value < 60) return `${value}m`;
+  return `${Math.floor(value / 60)}h ${value % 60 ? `${value % 60}m` : ""}`.trim();
+}
+
+function formatTimer(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function getWeekDays() {
+  return Array.from({ length: 7 }, (_, index) => dayOffset(6 - index));
+}
+
+function shortDay(date: Date) {
+  return date.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2);
+}
+
+function randomId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function readState(): FocusUniverseState {
+  try {
+    const value = window.localStorage.getItem(STORAGE_KEY);
+    if (!value) return initialState;
+    const parsed = JSON.parse(value) as Partial<FocusUniverseState>;
+    return {
+      xp: Number(parsed.xp) || 0,
+      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      goals: Array.isArray(parsed.goals) ? parsed.goals : [],
+      productiveDates: parsed.productiveDates ?? {},
+    };
+  } catch {
+    return initialState;
+  }
+}
+
+function NavItem({ icon: Icon, label, active, onClick }: { icon: typeof Orbit; label: string; active?: boolean; onClick?: () => void }) {
+  return (
+    <button className={`nav-item ${active ? "is-active" : ""}`} onClick={onClick} type="button">
+      <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function Metric({ icon: Icon, label, value, detail, accent }: { icon: typeof Clock3; label: string; value: string | number; detail?: string; accent?: "teal" | "gold" | "blue" }) {
+  return (
+    <article className={`metric-card ${accent ? `metric-${accent}` : ""}`}>
+      <div className="metric-icon"><Icon size={17} /></div>
+      <div>
+        <p>{label}</p>
+        <strong>{value}</strong>
+        {detail && <small>{detail}</small>}
+      </div>
+    </article>
+  );
+}
+
 export default function Home() {
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  const [state, setState] = useState<FocusUniverseState>(readState);
+  const [duration, setDuration] = useState(25);
+  const [secondsLeft, setSecondsLeft] = useState(25 * 60);
+  const [isRunning, setIsRunning] = useState(false);
+  const [goalText, setGoalText] = useState("");
+  const [editingGoal, setEditingGoal] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [notice, setNotice] = useState("Your observatory is ready for a new orbit.");
+  const [xpPulse, setXpPulse] = useState<number | null>(null);
+  const [levelUp, setLevelUp] = useState<number | null>(null);
+  const [activeView, setActiveView] = useState("Mission control");
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state]);
+
+  useEffect(() => {
+    if (!isRunning) return undefined;
+    const interval = window.setInterval(() => setSecondsLeft((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(interval);
+  }, [isRunning]);
+
+  const completeFocus = () => {
+    const timestamp = new Date().toISOString();
+    setIsRunning(false);
+    setSecondsLeft(duration * 60);
+    setState((previous) => ({
+      ...previous,
+      xp: previous.xp + FOCUS_XP,
+      sessions: [...previous.sessions, { id: randomId(), completedAt: timestamp, durationMinutes: duration }],
+      productiveDates: { ...previous.productiveDates, [dateKey(timestamp)]: true },
+    }));
+    const beforeLevel = levelForXp(state.xp);
+    const afterLevel = levelForXp(state.xp + FOCUS_XP);
+    setXpPulse(FOCUS_XP);
+    window.setTimeout(() => setXpPulse(null), 1500);
+    if (afterLevel > beforeLevel) {
+      setLevelUp(afterLevel);
+      setNotice(`Level ${afterLevel} reached. Your universe has expanded.`);
+      window.setTimeout(() => setLevelUp(null), 3800);
+    } else {
+      setNotice(`Session complete. +${FOCUS_XP} XP recorded in your constellation.`);
+    }
+  };
+
+  useEffect(() => {
+    if (secondsLeft === 0 && isRunning) completeFocus();
+    // Completion is intentionally tied to the exact zero-second event.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsLeft, isRunning]);
+
+  const progress = useMemo(() => levelProgress(state.xp), [state.xp]);
+  const streak = useMemo(() => calculateStreak(state.productiveDates), [state.productiveDates]);
+  const today = dateKey(new Date());
+  const todaySessions = useMemo(() => state.sessions.filter((session) => dateKey(session.completedAt) === today), [state.sessions, today]);
+  const todayFocus = todaySessions.reduce((total, session) => total + session.durationMinutes, 0);
+  const todayGoals = state.goals.filter((goal) => dateKey(goal.createdAt) === today);
+  const completeGoals = todayGoals.filter((goal) => goal.completed).length;
+  const weeklyData = useMemo(() => getWeekDays().map((date) => {
+    const key = dateKey(date);
+    return {
+      label: shortDay(date),
+      minutes: state.sessions.filter((session) => dateKey(session.completedAt) === key).reduce((total, session) => total + session.durationMinutes, 0),
+    };
+  }), [state.sessions]);
+  const weeklyFocus = weeklyData.reduce((total, day) => total + day.minutes, 0);
+  const monthlyFocus = state.sessions.filter((session) => new Date(session.completedAt) >= dayOffset(29)).reduce((total, session) => total + session.durationMinutes, 0);
+  const universeLevel = Math.max(1, Math.ceil(progress.level / 2));
+  const starCount = Math.min(42, 9 + Math.floor(state.xp / 55));
+  const planetCount = Math.min(4, Math.floor(state.xp / 300));
+  const moonCount = Math.max(0, Math.floor((progress.level - 2) / 2));
+  const showComet = streak.current >= 3;
+
+  const timerProgress = Math.max(0, Math.min(1, 1 - secondsLeft / (duration * 60)));
+  const timerDash = 2 * Math.PI * 118;
+
+  const changeDuration = (next: number) => {
+    const safe = Math.min(120, Math.max(1, Math.floor(next || 1)));
+    setDuration(safe);
+    if (!isRunning) setSecondsLeft(safe * 60);
+  };
+
+  const addGoal = (event: FormEvent) => {
+    event.preventDefault();
+    const title = goalText.trim();
+    if (!title) return;
+    setState((previous) => ({
+      ...previous,
+      goals: [...previous.goals, { id: randomId(), title, completed: false, createdAt: new Date().toISOString() }],
+    }));
+    setGoalText("");
+    setNotice("A new goal is waiting in today’s flight plan.");
+  };
+
+  const toggleGoal = (id: string) => {
+    const goal = state.goals.find((item) => item.id === id);
+    if (!goal) return;
+    const completing = !goal.completed;
+    const now = new Date().toISOString();
+    setState((previous) => ({
+      ...previous,
+      goals: previous.goals.map((item) => item.id === id
+        ? { ...item, completed: completing, completedAt: completing ? (item.completedAt ?? now) : item.completedAt, xpAwarded: completing ? true : item.xpAwarded }
+        : item),
+      productiveDates: completing ? { ...previous.productiveDates, [dateKey(now)]: true } : previous.productiveDates,
+      xp: completing && !goal.xpAwarded ? previous.xp + GOAL_XP : previous.xp,
+    }));
+    const xpGain = completing && !goal.xpAwarded ? GOAL_XP : 0;
+    if (xpGain) {
+      const beforeLevel = levelForXp(state.xp);
+      const afterLevel = levelForXp(state.xp + xpGain);
+      setXpPulse(GOAL_XP);
+      window.setTimeout(() => setXpPulse(null), 1500);
+      if (afterLevel > beforeLevel) {
+        setLevelUp(afterLevel);
+        setNotice(`Level ${afterLevel} reached. A new orbit has opened.`);
+        window.setTimeout(() => setLevelUp(null), 3800);
+      } else {
+        setNotice(`Goal complete. +${GOAL_XP} XP added to your record.`);
+      }
+    } else {
+      setNotice(completing ? "Goal marked complete." : "Goal returned to your flight plan.");
+    }
+  };
+
+  const saveGoalEdit = (id: string) => {
+    const title = editingText.trim();
+    if (!title) return;
+    setState((previous) => ({ ...previous, goals: previous.goals.map((goal) => goal.id === id ? { ...goal, title } : goal) }));
+    setEditingGoal(null);
+    setNotice("Goal coordinates updated.");
+  };
+
+  const deleteGoal = (id: string) => {
+    setState((previous) => ({ ...previous, goals: previous.goals.filter((goal) => goal.id !== id) }));
+    if (editingGoal === id) setEditingGoal(null);
+    setNotice("Goal removed from today’s flight plan.");
+  };
+
+  const resetAll = () => {
+    if (!window.confirm("Reset all Focus Universe progress? This removes saved sessions, goals, XP, and streak history from this browser.")) return;
+    setState(initialState);
+    setIsRunning(false);
+    setDuration(25);
+    setSecondsLeft(25 * 60);
+    setNotice("All saved progress has been cleared from this device.");
+  };
+
+  const scrollTo = (id: string, label: string) => {
+    setActiveView(label);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
+    <div className="focus-universe-shell">
+      <div className="deep-space" aria-hidden="true" style={{ backgroundImage: `url(${NEBULA_IMAGE})` }} />
+      <div className="star-dust" aria-hidden="true" />
+      <aside className="side-rail" aria-label="Primary navigation">
+        <button className="brand-lockup" type="button" onClick={() => scrollTo("mission-control", "Mission control")} aria-label="Focus Universe home">
+          <img src={LOGO_IMAGE} alt="" className="brand-mark" />
+          <span><b>FOCUS</b><em>UNIVERSE</em></span>
+        </button>
+        <nav className="nav-stack">
+          <NavItem icon={Orbit} label="Mission control" active={activeView === "Mission control"} onClick={() => scrollTo("mission-control", "Mission control")} />
+          <NavItem icon={Sparkles} label="My universe" active={activeView === "My universe"} onClick={() => scrollTo("universe", "My universe")} />
+          <NavItem icon={Clock3} label="Focus log" active={activeView === "Focus log"} onClick={() => scrollTo("focus-log", "Focus log")} />
+          <NavItem icon={Goal} label="Daily goals" active={activeView === "Daily goals"} onClick={() => scrollTo("goals", "Daily goals")} />
+        </nav>
+        <div className="rail-bottom">
+          <button className="rail-utility" type="button" onClick={() => setNotice("All signals are saved locally in this browser.")} aria-label="About local storage"><CircleHelp size={18} /></button>
+          <div className="local-signal"><i /> local</div>
+        </div>
+      </aside>
+
+      <main className="command-deck" id="mission-control">
+        <header className="topbar">
+          <div>
+            <div className="deck-brand" aria-label="Focus Universe">
+              <img src={LOGO_IMAGE} alt="" />
+              <span><b>Focus</b><em>Universe</em></span>
+              <i />
+              <small>Observer log</small>
+            </div>
+            <p className="eyebrow">Mission control <span>•</span> {new Date().toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</p>
+            <h1>Make space for what matters.</h1>
+          </div>
+          <div className="topbar-status" aria-live="polite">
+            <span className="signal-dot" />
+            <p>{notice}</p>
+          </div>
+        </header>
+
+        <section className="main-orbit" aria-label="Focus session and universe overview">
+          <article className="timer-panel glass-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Current orbit</p>
+                <h2>{isRunning ? "Focus session in progress" : secondsLeft < duration * 60 ? "Orbit on pause" : "Ready when you are"}</h2>
+              </div>
+              <div className="node-readout"><span>NODE α·01</span><span className="panel-status"><i className={isRunning ? "live" : ""} /> {isRunning ? "Focusing" : "Standby"}</span></div>
+            </div>
+
+            <div className="timer-layout">
+              <div className="timer-orbit" role="timer" aria-label={`${formatTimer(secondsLeft)} remaining`}>
+                <svg viewBox="0 0 260 260" aria-hidden="true">
+                  <circle className="timer-track" cx="130" cy="130" r="118" />
+                  <circle className="timer-progress" cx="130" cy="130" r="118" style={{ strokeDasharray: timerDash, strokeDashoffset: timerDash * (1 - timerProgress) }} />
+                  <circle className="timer-orbit-dot" cx="130" cy="12" r="3" />
+                </svg>
+                <div className="timer-readout">
+                  <span>{formatTimer(secondsLeft)}</span>
+                  <small>{duration} MIN FOCUS BLOCK</small>
+                </div>
+              </div>
+              <div className="timer-controls">
+                <div className="timer-action-row">
+                  <button className="timer-action primary" type="button" onClick={() => setIsRunning((current) => !current)}>
+                    {isRunning ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}
+                    {isRunning ? "Pause orbit" : secondsLeft < duration * 60 ? "Resume orbit" : "Begin focus"}
+                  </button>
+                  <button className="timer-action icon-only" type="button" onClick={() => { setIsRunning(false); setSecondsLeft(duration * 60); setNotice("The current orbit has been reset."); }} aria-label="Reset timer"><RotateCcw size={19} /></button>
+                </div>
+                <label className="duration-control">
+                  <span>Focus duration</span>
+                  <div><input type="number" min="1" max="120" inputMode="numeric" value={duration} disabled={isRunning} onChange={(event) => changeDuration(Number(event.target.value))} /><b>min</b></div>
+                </label>
+                <p className="timer-note">Complete the entire block to capture <b>+{FOCUS_XP} XP</b>. Resets and pauses keep the orbit unfinished.</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="universe-panel" id="universe">
+            <div className="universe-visual" style={{ backgroundImage: `linear-gradient(180deg, rgba(3, 8, 24, 0.05), rgba(3, 8, 24, 0.72)), url(${PLANET_IMAGE})` }}>
+              <div className="orbit orbit-one" />
+              <div className="orbit orbit-two" />
+              {Array.from({ length: starCount }, (_, index) => <i className={`universe-star star-${index % 6}`} key={index} style={{ left: `${(index * 37 + 9) % 93}%`, top: `${(index * 53 + 5) % 86}%`, animationDelay: `${(index % 8) * 0.7}s` }} />)}
+              {planetCount > 0 && <span className="mini-planet mini-planet-one" />}
+              {planetCount > 1 && <span className="mini-planet mini-planet-two" />}
+              {moonCount > 0 && <span className="moon moon-one" />}
+              {moonCount > 1 && <span className="moon moon-two" />}
+              {showComet && <img className="comet-object" src={COMET_IMAGE} alt="A comet unlocked by your focus streak" />}
+              <div className="universe-copy">
+                <p className="eyebrow">Personal universe</p>
+                <div><strong>Sector 0{universeLevel}</strong><span>growing with every completed orbit</span></div>
+              </div>
+              <span className="sector-node">SECTOR β·{String(universeLevel).padStart(2, "0")}</span>
+              <div className="universe-legend"><span><i className="legend-star" /> {starCount} stars</span><span><i className="legend-orbit" /> {planetCount} planets</span></div>
+            </div>
+            <div className="universe-footer">
+              <div><p>Next object</p><strong>{planetCount === 0 ? "First planet" : moonCount === 0 ? "Companion moon" : showComet ? "Outer orbit" : "Streak comet"}</strong></div>
+              <div className="unlock-progress"><span style={{ width: `${Math.min(100, (state.xp % 300) / 3)}%` }} /></div>
+              <small>{state.xp % 300}/300 XP</small>
+            </div>
+          </article>
+        </section>
+
+        <section className="metrics-strip" aria-label="Today’s productivity metrics">
+          <Metric icon={Clock3} label="Today’s focus" value={formatMinutes(todayFocus)} detail={`${todaySessions.length} completed ${todaySessions.length === 1 ? "session" : "sessions"}`} accent="blue" />
+          <Metric icon={Zap} label="Total energy" value={`${state.xp} XP`} detail={`${progress.remaining} XP to next level`} accent="teal" />
+          <Metric icon={Flame} label="Focus streak" value={`${streak.current} ${streak.current === 1 ? "day" : "days"}`} detail={`Personal best: ${streak.best} ${streak.best === 1 ? "day" : "days"}`} accent="gold" />
+          <Metric icon={Trophy} label="Universe level" value={`0${universeLevel}`} detail={`Level ${progress.level} observer`} />
+        </section>
+
+        <section className="lower-deck" id="focus-log">
+          <article className="insight-panel glass-panel">
+            <div className="section-heading">
+              <div><p className="eyebrow">Focus log</p><h2>Energy across your week</h2></div>
+              <div className="instrument-status"><span>VECTOR C·07</span><span className="metric-note">{formatMinutes(weeklyFocus)} total</span></div>
+            </div>
+            <div className="trend-chart" aria-label="Weekly focus time chart">
+              <div className="chart-grid"><span /><span /><span /><span /></div>
+              <div className="chart-bars">
+                {weeklyData.map((day) => <div className="bar-group" key={day.label}><div className="bar-value">{day.minutes ? `${day.minutes}m` : ""}</div><div className="bar-well"><span style={{ height: `${Math.max(5, Math.min(100, (day.minutes / Math.max(30, ...weeklyData.map((entry) => entry.minutes))) * 100))}%` }} /></div><small>{day.label}</small></div>)}
+              </div>
+            </div>
+            <div className="insight-stat-row">
+              <div><span>Monthly focus</span><strong>{formatMinutes(monthlyFocus)}</strong></div>
+              <div><span>Sessions complete</span><strong>{state.sessions.length}</strong></div>
+              <div><span>Goals complete</span><strong>{state.goals.filter((goal) => goal.completed).length}</strong></div>
+              <button type="button" onClick={() => setNotice("Analytics reflect every completed session and goal saved on this device.")}>View signal <ChevronRight size={16} /></button>
+            </div>
+          </article>
+
+          <article className="level-panel glass-panel">
+            <div className="level-badge"><span>LVL</span><strong>{String(progress.level).padStart(2, "0")}</strong></div>
+            <div className="level-content"><p className="eyebrow">Observer level</p><h2>{progress.level < 3 ? "Stargazer" : progress.level < 6 ? "Orbit keeper" : "Deep space navigator"}</h2><p>Every focused block adds a little more gravity to your universe.</p></div>
+            <div className="level-progress"><div><span>{progress.current} XP gathered</span><span>{progress.required} XP</span></div><div className="level-track"><span style={{ width: `${progress.percent}%` }} /></div></div>
+          </article>
+        </section>
+
+        <section className="goals-panel glass-panel" id="goals">
+            <div className="section-heading">
+              <div><p className="eyebrow">Today’s flight plan</p><h2>Daily goals</h2></div>
+            <div className="instrument-status"><span>LOG D·TODAY</span><span className="goals-count"><b>{completeGoals}</b> / {todayGoals.length} complete</span></div>
+          </div>
+          <form className="add-goal" onSubmit={addGoal}>
+            <input value={goalText} onChange={(event) => setGoalText(event.target.value)} placeholder="Add an intentional goal for today" aria-label="New daily goal" maxLength={120} />
+            <button type="submit"><Plus size={18} /> Add goal</button>
+          </form>
+          <div className="goal-list">
+            {todayGoals.length === 0 ? <div className="empty-goals"><Sparkles size={20} /><p>No goals in orbit yet. Add one small, specific intention to begin.</p></div> : todayGoals.map((goal) => (
+              <div className={`goal-row ${goal.completed ? "is-complete" : ""}`} key={goal.id}>
+                <button className="goal-check" type="button" aria-label={goal.completed ? `Mark ${goal.title} incomplete` : `Complete ${goal.title}`} onClick={() => toggleGoal(goal.id)}>{goal.completed && <Check size={15} strokeWidth={3} />}</button>
+                {editingGoal === goal.id ? <input className="goal-edit-input" autoFocus value={editingText} onChange={(event) => setEditingText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveGoalEdit(goal.id); if (event.key === "Escape") setEditingGoal(null); }} /> : <p>{goal.title}</p>}
+                <span className="goal-xp">{goal.completed && goal.xpAwarded ? "+20 XP" : "+20 XP on completion"}</span>
+                <div className="goal-actions">
+                  {editingGoal === goal.id ? <><button type="button" aria-label="Save goal" onClick={() => saveGoalEdit(goal.id)}><Check size={16} /></button><button type="button" aria-label="Cancel edit" onClick={() => setEditingGoal(null)}><X size={16} /></button></> : <><button type="button" aria-label="Edit goal" onClick={() => { setEditingGoal(goal.id); setEditingText(goal.title); }}><Edit3 size={16} /></button><button type="button" aria-label="Delete goal" onClick={() => deleteGoal(goal.id)}><Trash2 size={16} /></button></>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <footer className="deck-footer">
+          <p><span className="signal-dot" /> All progress is stored locally on this device.</p>
+          <button type="button" onClick={resetAll}><Trash2 size={14} /> Reset all progress</button>
+        </footer>
       </main>
+
+      {xpPulse !== null && <div className="xp-pulse" aria-live="polite"><Zap size={17} fill="currentColor" /> +{xpPulse} XP</div>}
+      {levelUp !== null && <div className="level-up" role="status"><img src={LOGO_IMAGE} alt="" /><p>New level detected</p><strong>Observer level {levelUp}</strong><span>Your universe has opened a new orbit.</span></div>}
     </div>
   );
 }
