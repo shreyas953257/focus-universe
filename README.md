@@ -4,6 +4,10 @@
 
 Focus Universe is a cinematic productivity web app built around intentional focus sessions, daily goals, and visible long-term progression. It is designed to work entirely in the browser: users can track work, earn XP, grow a universe, review insights, and retain ownership of their data without creating an account.
 
+## Live Demo
+
+A hosted public demo is not configured in this repository. Run the project locally with the instructions below to explore the complete experience.
+
 ## What It Does
 
 The app provides a focused 25-minute default timer, editable daily goals, and a personal progression system. Completing a full focus session or a goal awards XP; XP advances the observer level and expands the user’s universe with stars, planets, moons, comets, and sectors. Local analytics translate completed sessions into daily, weekly, and monthly focus totals.
@@ -141,16 +145,13 @@ pnpm test:coverage
 
 ## Screenshots
 
-Portfolio screenshots can be added before publishing to GitHub.
+The repository includes authentic captures from the running application in `docs/screenshots/`.
 
-```text
-docs/screenshots/
-├── mission-control.png
-├── unlock-history.png
-└── data-and-settings.png
-```
+| Main dashboard | Mobile layout |
+| --- | --- |
+| ![Focus Universe main dashboard](docs/screenshots/main-dashboard.jpg) | ![Focus Universe mobile layout](docs/screenshots/mobile-layout.png) |
 
-Suggested captures include the timer and universe dashboard, the Unlock History archive, and the Data & Settings section on desktop and mobile.
+Additional screenshot slots are reserved for the **Focus Timer + Personal Universe**, **Unlock History**, **Daily Goals**, and **Data & Settings** flows. Place future captures in `docs/screenshots/` and update this table when new views are added.
 
 ## Privacy
 
@@ -161,6 +162,14 @@ All productivity data stays locally in the browser. No account or server is requ
 - Add a pre-import backup summary with session, goal, and discovery counts.
 - Add optional local notification permissions for completed focus sessions.
 - Add a concise goal-completion trend view alongside weekly focus totals.
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, quality checks, contribution workflow, and pull request expectations.
+
+## Author
+
+**Shreyas**
 
 ---
 
